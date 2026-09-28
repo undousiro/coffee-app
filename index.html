@@ -122,25 +122,61 @@
       margin: 12px 0 0;
       padding: 0;
     }
+    /* 1行＝「名前」「注ぐ量（入力欄）」「スケールの累計」の3列 */
     .steps li {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      padding: 12px 4px;
+      display: grid;
+      grid-template-columns: 4.5em 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 0;
       border-bottom: 1px solid var(--line);
     }
     .steps li:last-child { border-bottom: none; }
-    .steps .name { color: var(--sub); }
+    .steps .name { color: var(--sub); font-size: 16px; }
+    .steps .amount {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 16px;
+      color: var(--sub);
+    }
+    .steps .amount input {
+      min-height: 48px;
+      font-size: 20px;
+      padding: 6px 8px;
+    }
+    /* 手入力した回は枠を濃くして目立たせる */
+    .steps .amount input.manual {
+      border-color: var(--main);
+      font-weight: bold;
+    }
+    /* 最後の1投（自動計算で入力できない） */
+    .steps .amount input[readonly] {
+      background: var(--bg);
+      border-style: dashed;
+    }
     .steps .total {
-      font-size: 26px;
+      font-size: 24px;
       font-weight: bold;
       color: var(--main-dark);
-    }
-    .steps .add {
-      display: block;
-      font-size: 14px;
-      color: var(--sub);
       text-align: right;
+      min-width: 4.5em;
+    }
+    .steps li.over .total,
+    .steps li.over .amount input { color: #a33a2a; }
+
+    /* リセットボタン */
+    .reset {
+      width: 100%;
+      min-height: 52px;
+      margin-top: 12px;
+      font-size: 18px;
+      font-weight: bold;
+      border: 2px solid var(--main);
+      border-radius: 12px;
+      background: var(--card);
+      color: var(--main);
+      cursor: pointer;
     }
 
     .note {
@@ -206,15 +242,24 @@
   <section class="card">
     <h2>注ぐ量の目安（スケールの数字）</h2>
     <p class="note" id="message">豆の量かお湯の量を入力してください。</p>
-    <ul class="steps" id="steps"></ul>
+    <!-- 中身は JavaScript で作る -->
+    <ul class="steps" id="steps" hidden></ul>
+    <p class="note" id="hint" hidden>各回の量は書き換えできます（空にすると自動に戻ります）。最後の1投は自動で計算します。</p>
+    <button type="button" class="reset" id="resetButton">リセット（自動計算に戻す）</button>
   </section>
 </main>
 
 <script>
   // ===== 今の状態を覚えておく変数 =====
+  let ratioChoice = "16";  // 選んでいる比率ボタン（"15" / "16" / "17" / "custom"）
   let ratio = 16;          // 比率（1:16 なら 16）
   let pours = 3;           // 蒸らしのあとに注ぐ回数
   let lastInput = "beans"; // 最後に入力したのは「豆」か「お湯」か
+  let bloomManual = null;  // 手入力した蒸らし量（null のときは自動＝豆×2）
+  let pourManual = [];     // 各回の手入力量（null の回は自動）。最後の1投は含めない
+
+  // ブラウザに保存するときの名前
+  const STORAGE_KEY = "coffee-calculator";
 
   // ===== 画面の部品を取り出しておく =====
   const beansInput = document.getElementById("beans");
@@ -223,13 +268,23 @@
   const customInput = document.getElementById("customRatio");
   const stepsList = document.getElementById("steps");
   const message = document.getElementById("message");
+  const hint = document.getElementById("hint");
+
+  // 一覧の各行の部品（buildRows で作る）
+  let rows = [];
 
   // 小数点第1位までに丸めて文字にする（例：240.04 → "240"、12.345 → "12.3"）
   function format(num) {
     return String(Math.round(num * 10) / 10);
   }
 
-  // 比率が変わったり、量が入力されたりしたら、ここで全部計算し直す
+  // 入力欄の文字を数字にする（空や0未満なら null ＝「自動」）
+  function readManual(input) {
+    const value = parseFloat(input.value);
+    return value >= 0 ? value : null;
+  }
+
+  // 比率が変わったり、量が入力されたりしたら、ここで計算し直す
   function calculate() {
     // 最後に入力された方をもとに、もう片方を計算する
     if (lastInput === "beans") {
@@ -242,50 +297,123 @@
     showSteps();
   }
 
-  // 注ぐ量の目安（スケールの累計）を表示する
-  function showSteps() {
+  // 蒸らし＋各回の注ぐ量を計算する
+  function makePlan() {
     const beans = parseFloat(beansInput.value);
     const water = parseFloat(waterInput.value);
+    if (!(beans > 0) || !(water > 0)) return null;
+
+    // 蒸らし：手入力があればそれ、なければ豆の2倍
+    const bloom = bloomManual !== null ? bloomManual : beans * 2;
+
+    // 手入力された回の合計と、自動で分ける回の数を数える
+    let manualSum = 0;
+    let autoCount = 1; // 最後の1投は必ず自動なので1から数える
+    for (let i = 0; i < pours - 1; i++) {
+      if (pourManual[i] !== null) manualSum += pourManual[i];
+      else autoCount++;
+    }
+
+    // 残りのお湯を、自動の回で均等に分ける（マイナスにはしない）
+    const autoAmount = Math.max(0, (water - bloom - manualSum) / autoCount);
+
+    // 最後の1投以外の量を決める
+    const amounts = [];
+    let used = 0;
+    for (let i = 0; i < pours - 1; i++) {
+      const amount = pourManual[i] !== null ? pourManual[i] : autoAmount;
+      amounts.push(amount);
+      used += amount;
+    }
+    // 最後の1投＝総湯量 − それまでの合計
+    amounts.push(water - bloom - used);
+
+    return { water, bloom, amounts };
+  }
+
+  // 一覧の行（蒸らし＋注ぐ回数ぶん）を作り直す
+  function buildRows() {
     stepsList.innerHTML = "";
+    rows = [];
+    const names = ["蒸らし"];
+    for (let i = 1; i <= pours; i++) names.push(i + "投目");
+
+    names.forEach((name, index) => {
+      const li = document.createElement("li");
+      li.innerHTML =
+        '<span class="name">' + name + '</span>' +
+        '<span class="amount"><input type="number" inputmode="decimal" min="0" step="0.1"> g</span>' +
+        '<span class="total"></span>';
+      const input = li.querySelector("input");
+      const isLast = index === names.length - 1;
+
+      if (isLast) {
+        // 最後の1投は自動計算なので入力できないようにする
+        input.readOnly = true;
+        input.tabIndex = -1;
+      } else {
+        // 量を書き換えたとき
+        input.addEventListener("input", () => {
+          if (index === 0) bloomManual = readManual(input);
+          else pourManual[index - 1] = readManual(input);
+          showSteps(input); // 入力中の欄はそのままにして、他を計算し直す
+          save();
+        });
+        // 入力欄から離れたら、数字の見た目を整える
+        input.addEventListener("blur", () => showSteps());
+      }
+
+      stepsList.appendChild(li);
+      rows.push({ li, input, total: li.querySelector(".total") });
+    });
+  }
+
+  // 注ぐ量の目安（スケールの累計）を表示する
+  // editing：いま入力中の欄（その欄の数字は書き換えない）
+  function showSteps(editing) {
+    const plan = makePlan();
 
     // まだ入力されていないとき
-    if (!(beans > 0) || !(water > 0)) {
+    if (!plan) {
+      stepsList.hidden = true;
+      hint.hidden = true;
       message.textContent = "豆の量かお湯の量を入力してください。";
       message.className = "note";
       return;
     }
+    stepsList.hidden = false;
+    hint.hidden = false;
 
-    const bloom = beans * 2; // 蒸らしのお湯＝豆の2倍
+    const amounts = [plan.bloom, ...plan.amounts]; // 蒸らし＋各回
+    const manualFlags = [bloomManual !== null, ...pourManual.map(v => v !== null), false];
+    let total = 0;
 
-    // 蒸らしだけでお湯を使い切ってしまうとき（比率が小さすぎる）
-    if (bloom >= water) {
-      message.textContent = "比率が小さすぎて、蒸らしだけでお湯を使い切ってしまいます。";
+    amounts.forEach((amount, i) => {
+      const row = rows[i];
+      total += amount;
+      if (row.input !== editing) row.input.value = format(amount);
+      row.input.classList.toggle("manual", manualFlags[i]);
+      row.total.textContent = format(total) + " g";
+      row.li.classList.remove("over");
+    });
+
+    // 最後の1投がマイナス＝合計が総湯量を超えている
+    const last = amounts[amounts.length - 1];
+    if (last < -0.05) {
+      message.textContent = "合計が総湯量を " + format(-last) + " g 超えています。量を見直してください。";
       message.className = "note warning";
-      return;
-    }
-
-    message.textContent = "スケールがこの数字になるまで注ぎます。";
-    message.className = "note";
-
-    // 1行目：蒸らし
-    addStep("蒸らし", bloom, bloom);
-
-    // 残りのお湯を、選んだ回数で均等に分ける
-    const perPour = (water - bloom) / pours;
-    for (let i = 1; i <= pours; i++) {
-      const total = bloom + perPour * i; // i回目が終わったときの累計
-      addStep(i + "投目", total, perPour);
+      rows[rows.length - 1].li.classList.add("over");
+    } else {
+      message.textContent = "スケールがこの数字になるまで注ぎます。";
+      message.className = "note";
     }
   }
 
-  // 一覧に1行追加する
-  function addStep(name, total, add) {
-    const li = document.createElement("li");
-    li.innerHTML =
-      '<span class="name">' + name + '</span>' +
-      '<span><span class="total">' + format(total) + ' g</span>' +
-      '<span class="add">（+' + format(add) + ' g）</span></span>';
-    stepsList.appendChild(li);
+  // 注ぐ回数が変わったとき：手入力をリセットして行を作り直す
+  function setPours(count) {
+    pours = count;
+    pourManual = new Array(pours - 1).fill(null);
+    buildRows();
   }
 
   // ボタンの「選択中」の見た目を切り替える
@@ -294,22 +422,66 @@
     clicked.classList.add("selected");
   }
 
+  // 比率ボタンの選択を反映する
+  function applyRatioChoice(choice) {
+    ratioChoice = choice;
+    const group = document.getElementById("ratioButtons");
+    selectButton(group, group.querySelector('[data-ratio="' + choice + '"]'));
+    if (choice === "custom") {
+      customBox.hidden = false;           // 自由入力欄を表示
+      ratio = parseFloat(customInput.value) || 16;
+    } else {
+      customBox.hidden = true;            // 自由入力欄を隠す
+      ratio = Number(choice);
+    }
+  }
+
+  // ===== ブラウザへの保存と復元 =====
+
+  // 比率・蒸らし量・注ぐ回数を保存する
+  function save() {
+    const data = {
+      ratioChoice: ratioChoice,
+      customRatio: customInput.value,
+      bloom: bloomManual,
+      pours: pours
+    };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {
+      // 保存できない環境（プライベートモードなど）では何もしない
+    }
+  }
+
+  // 前回保存した内容を読み込んで、画面に反映する
+  function load() {
+    let data = null;
+    try {
+      data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    } catch (e) {
+      data = null;
+    }
+    if (!data) return;
+
+    if (parseFloat(data.customRatio) > 0) customInput.value = data.customRatio;
+    if (["15", "16", "17", "custom"].includes(data.ratioChoice)) applyRatioChoice(data.ratioChoice);
+    if (typeof data.bloom === "number" && data.bloom >= 0) bloomManual = data.bloom;
+    if ([2, 3, 4].includes(data.pours)) {
+      const group = document.getElementById("pourButtons");
+      selectButton(group, group.querySelector('[data-pours="' + data.pours + '"]'));
+      pours = data.pours;
+    }
+  }
+
   // ===== ボタンや入力欄を操作したときの動き =====
 
   // 比率ボタンを押したとき
   document.getElementById("ratioButtons").addEventListener("click", e => {
     const button = e.target.closest("button");
     if (!button) return;
-    selectButton(e.currentTarget, button);
-
-    if (button.dataset.ratio === "custom") {
-      customBox.hidden = false;           // 自由入力欄を表示
-      ratio = parseFloat(customInput.value) || 16;
-    } else {
-      customBox.hidden = true;            // 自由入力欄を隠す
-      ratio = Number(button.dataset.ratio);
-    }
+    applyRatioChoice(button.dataset.ratio);
     calculate();
+    save();
   });
 
   // 自由入力の比率を変えたとき
@@ -318,6 +490,7 @@
     if (value > 0) {
       ratio = value;
       calculate();
+      save();
     }
   });
 
@@ -338,9 +511,23 @@
     const button = e.target.closest("button");
     if (!button) return;
     selectButton(e.currentTarget, button);
-    pours = Number(button.dataset.pours);
+    setPours(Number(button.dataset.pours));
     showSteps();
+    save();
   });
+
+  // リセットボタンを押したとき：蒸らしも各回も自動計算に戻す
+  document.getElementById("resetButton").addEventListener("click", () => {
+    bloomManual = null;
+    pourManual = new Array(pours - 1).fill(null);
+    showSteps();
+    save();
+  });
+
+  // ===== ページを開いたときに1回だけ実行 =====
+  load();
+  setPours(pours);
+  showSteps();
 </script>
 </body>
 </html>
