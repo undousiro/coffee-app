@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <!-- スマホの画面幅に合わせて表示する設定 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>コーヒー比率計算機</title>
+  <style>
+    /* ===== 色の設定（ここを変えると全体の色が変わる） ===== */
+    :root {
+      --bg: #f5efe6;        /* 背景：ミルクのような薄いベージュ */
+      --card: #fffaf3;      /* カードの背景 */
+      --text: #3b2a20;      /* 文字：深いコーヒー色 */
+      --sub: #7a6355;       /* 補足の文字 */
+      --main: #6f4e37;      /* メイン色：コーヒーブラウン */
+      --main-dark: #4a3226; /* 濃いブラウン */
+      --line: #e2d6c8;      /* 枠線 */
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+      font-size: 18px;
+      line-height: 1.5;
+    }
+
+    main {
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 24px;
+      text-align: center;
+      margin: 8px 0 16px;
+      color: var(--main-dark);
+    }
+
+    /* 白いカード（ひとまとまりの区切り） */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .card h2 {
+      font-size: 18px;
+      margin: 0 0 12px;
+      color: var(--main);
+    }
+
+    /* 比率・回数の選択ボタン */
+    .choices {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .choices.three { grid-template-columns: repeat(3, 1fr); }
+
+    .choices button {
+      min-height: 56px;
+      font-size: 18px;
+      font-weight: bold;
+      border: 2px solid var(--main);
+      border-radius: 12px;
+      background: var(--card);
+      color: var(--main);
+      cursor: pointer;
+    }
+    /* 選ばれているボタン */
+    .choices button.selected {
+      background: var(--main);
+      color: #fff;
+    }
+
+    /* 数字の入力欄 */
+    label {
+      display: block;
+      font-size: 16px;
+      color: var(--sub);
+      margin-bottom: 4px;
+    }
+    .input-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .input-row:last-child { margin-bottom: 0; }
+    input[type="number"] {
+      width: 100%;
+      min-height: 56px;
+      padding: 8px 12px;
+      font-size: 24px;
+      border: 2px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--text);
+    }
+    input[type="number"]:focus {
+      outline: none;
+      border-color: var(--main);
+    }
+    .unit {
+      font-size: 18px;
+      color: var(--sub);
+      min-width: 2.5em;
+    }
+
+    #customBox { margin-top: 12px; }
+
+    /* 注ぐ量の一覧 */
+    .steps {
+      list-style: none;
+      margin: 12px 0 0;
+      padding: 0;
+    }
+    .steps li {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 12px 4px;
+      border-bottom: 1px solid var(--line);
+    }
+    .steps li:last-child { border-bottom: none; }
+    .steps .name { color: var(--sub); }
+    .steps .total {
+      font-size: 26px;
+      font-weight: bold;
+      color: var(--main-dark);
+    }
+    .steps .add {
+      display: block;
+      font-size: 14px;
+      color: var(--sub);
+      text-align: right;
+    }
+
+    .note {
+      font-size: 14px;
+      color: var(--sub);
+      margin: 8px 0 0;
+    }
+    .warning {
+      color: #a33a2a;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>☕ 比率計算機</h1>
+
+  <!-- ① 比率を選ぶ -->
+  <section class="card">
+    <h2>比率（豆 : お湯）</h2>
+    <div class="choices" id="ratioButtons">
+      <button type="button" data-ratio="15">1:15</button>
+      <button type="button" data-ratio="16" class="selected">1:16</button>
+      <button type="button" data-ratio="17">1:17</button>
+      <button type="button" data-ratio="custom">自由</button>
+    </div>
+    <!-- 「自由」を押したときだけ表示される入力欄 -->
+    <div id="customBox" hidden>
+      <label for="customRatio">1 : いくつ？</label>
+      <div class="input-row">
+        <span class="unit">1 :</span>
+        <input type="number" id="customRatio" inputmode="decimal" min="1" step="0.1" value="16">
+      </div>
+    </div>
+  </section>
+
+  <!-- ② 豆とお湯の量（どちらを入れてもOK） -->
+  <section class="card">
+    <h2>量（どちらか一方を入力）</h2>
+    <label for="beans">豆の量</label>
+    <div class="input-row">
+      <input type="number" id="beans" inputmode="decimal" min="0" step="0.1" placeholder="例：15">
+      <span class="unit">g</span>
+    </div>
+    <label for="water">お湯の量</label>
+    <div class="input-row">
+      <input type="number" id="water" inputmode="decimal" min="0" step="0.1" placeholder="例：240">
+      <span class="unit">ml</span>
+    </div>
+  </section>
+
+  <!-- ③ 注ぐ回数を選ぶ -->
+  <section class="card">
+    <h2>注ぐ回数（蒸らしのあと）</h2>
+    <div class="choices three" id="pourButtons">
+      <button type="button" data-pours="2">2回</button>
+      <button type="button" data-pours="3" class="selected">3回</button>
+      <button type="button" data-pours="4">4回</button>
+    </div>
+  </section>
+
+  <!-- ④ 注ぐ量の目安（計算結果） -->
+  <section class="card">
+    <h2>注ぐ量の目安（スケールの数字）</h2>
+    <p class="note" id="message">豆の量かお湯の量を入力してください。</p>
+    <ul class="steps" id="steps"></ul>
+  </section>
+</main>
+
+<script>
+  // ===== 今の状態を覚えておく変数 =====
+  let ratio = 16;          // 比率（1:16 なら 16）
+  let pours = 3;           // 蒸らしのあとに注ぐ回数
+  let lastInput = "beans"; // 最後に入力したのは「豆」か「お湯」か
+
+  // ===== 画面の部品を取り出しておく =====
+  const beansInput = document.getElementById("beans");
+  const waterInput = document.getElementById("water");
+  const customBox = document.getElementById("customBox");
+  const customInput = document.getElementById("customRatio");
+  const stepsList = document.getElementById("steps");
+  const message = document.getElementById("message");
+
+  // 小数点第1位までに丸めて文字にする（例：240.04 → "240"、12.345 → "12.3"）
+  function format(num) {
+    return String(Math.round(num * 10) / 10);
+  }
+
+  // 比率が変わったり、量が入力されたりしたら、ここで全部計算し直す
+  function calculate() {
+    // 最後に入力された方をもとに、もう片方を計算する
+    if (lastInput === "beans") {
+      const beans = parseFloat(beansInput.value);
+      waterInput.value = beans > 0 ? format(beans * ratio) : "";
+    } else {
+      const water = parseFloat(waterInput.value);
+      beansInput.value = water > 0 ? format(water / ratio) : "";
+    }
+    showSteps();
+  }
+
+  // 注ぐ量の目安（スケールの累計）を表示する
+  function showSteps() {
+    const beans = parseFloat(beansInput.value);
+    const water = parseFloat(waterInput.value);
+    stepsList.innerHTML = "";
+
+    // まだ入力されていないとき
+    if (!(beans > 0) || !(water > 0)) {
+      message.textContent = "豆の量かお湯の量を入力してください。";
+      message.className = "note";
+      return;
+    }
+
+    const bloom = beans * 2; // 蒸らしのお湯＝豆の2倍
+
+    // 蒸らしだけでお湯を使い切ってしまうとき（比率が小さすぎる）
+    if (bloom >= water) {
+      message.textContent = "比率が小さすぎて、蒸らしだけでお湯を使い切ってしまいます。";
+      message.className = "note warning";
+      return;
+    }
+
+    message.textContent = "スケールがこの数字になるまで注ぎます。";
+    message.className = "note";
+
+    // 1行目：蒸らし
+    addStep("蒸らし", bloom, bloom);
+
+    // 残りのお湯を、選んだ回数で均等に分ける
+    const perPour = (water - bloom) / pours;
+    for (let i = 1; i <= pours; i++) {
+      const total = bloom + perPour * i; // i回目が終わったときの累計
+      addStep(i + "投目", total, perPour);
+    }
+  }
+
+  // 一覧に1行追加する
+  function addStep(name, total, add) {
+    const li = document.createElement("li");
+    li.innerHTML =
+      '<span class="name">' + name + '</span>' +
+      '<span><span class="total">' + format(total) + ' g</span>' +
+      '<span class="add">（+' + format(add) + ' g）</span></span>';
+    stepsList.appendChild(li);
+  }
+
+  // ボタンの「選択中」の見た目を切り替える
+  function selectButton(group, clicked) {
+    group.querySelectorAll("button").forEach(b => b.classList.remove("selected"));
+    clicked.classList.add("selected");
+  }
+
+  // ===== ボタンや入力欄を操作したときの動き =====
+
+  // 比率ボタンを押したとき
+  document.getElementById("ratioButtons").addEventListener("click", e => {
+    const button = e.target.closest("button");
+    if (!button) return;
+    selectButton(e.currentTarget, button);
+
+    if (button.dataset.ratio === "custom") {
+      customBox.hidden = false;           // 自由入力欄を表示
+      ratio = parseFloat(customInput.value) || 16;
+    } else {
+      customBox.hidden = true;            // 自由入力欄を隠す
+      ratio = Number(button.dataset.ratio);
+    }
+    calculate();
+  });
+
+  // 自由入力の比率を変えたとき
+  customInput.addEventListener("input", () => {
+    const value = parseFloat(customInput.value);
+    if (value > 0) {
+      ratio = value;
+      calculate();
+    }
+  });
+
+  // 豆の量を入力したとき
+  beansInput.addEventListener("input", () => {
+    lastInput = "beans";
+    calculate();
+  });
+
+  // お湯の量を入力したとき
+  waterInput.addEventListener("input", () => {
+    lastInput = "water";
+    calculate();
+  });
+
+  // 注ぐ回数ボタンを押したとき
+  document.getElementById("pourButtons").addEventListener("click", e => {
+    const button = e.target.closest("button");
+    if (!button) return;
+    selectButton(e.currentTarget, button);
+    pours = Number(button.dataset.pours);
+    showSteps();
+  });
+</script>
+</body>
+</html>
