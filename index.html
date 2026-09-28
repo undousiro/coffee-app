@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <!-- スマホの画面幅に合わせて表示する設定 -->
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>コーヒーアプリ</title>
   <style>
     /* ===== 色の設定（ここを変えると全体の色が変わる） ===== */
@@ -18,6 +18,9 @@
     }
 
     * { box-sizing: border-box; }
+
+    /* hidden（隠す）を指定したものは、どんな場合も必ず隠す */
+    [hidden] { display: none !important; }
 
     body {
       margin: 0;
@@ -197,7 +200,8 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
-      padding: 12px 0;
+      /* iPhoneの画面上部（切り欠き）に重ならないよう余白をとる */
+      padding: calc(12px + env(safe-area-inset-top, 0px)) 0 12px;
       background: var(--bg);
     }
     .tabs button {
@@ -248,6 +252,7 @@
       margin-top: 12px;
     }
     .button-row button { margin-top: 0; }
+    .button-row.single { grid-template-columns: 1fr; }
 
     /* ===== 記録の入力欄 ===== */
     .field { margin-bottom: 18px; }
@@ -359,6 +364,117 @@
       text-align: center;
       color: var(--sub);
     }
+
+    /* ボタンを素早く押しても画面が拡大されないようにする */
+    button { touch-action: manipulation; }
+
+    /* ===== 抽出タイマー ===== */
+    /* 下のボタン置き場に隠れないよう、下に余白をとる */
+    #timerView { padding-bottom: 210px; }
+    .timer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding-top: calc(12px + env(safe-area-inset-top, 0px));
+    }
+    .back {
+      min-height: 48px;
+      padding: 0 16px;
+      font-size: 16px;
+      font-weight: bold;
+      border: 2px solid var(--main);
+      border-radius: 12px;
+      background: var(--card);
+      color: var(--main);
+      cursor: pointer;
+    }
+    .timer-recipe {
+      font-size: 14px;
+      color: var(--sub);
+      text-align: right;
+    }
+    /* 大きな時計 */
+    .clock {
+      margin: 12px 0 0;
+      font-size: 84px;
+      font-weight: bold;
+      line-height: 1.1;
+      text-align: center;
+      font-variant-numeric: tabular-nums; /* 数字の幅をそろえて、ガタつかないように */
+      color: var(--main-dark);
+    }
+    .timer-status {
+      min-height: 3em;
+      margin: 4px 0 12px;
+      font-size: 18px;
+      font-weight: bold;
+      text-align: center;
+      color: var(--main);
+    }
+    .timer-steps .grams {
+      font-size: 22px;
+      font-weight: bold;
+      color: var(--main-dark);
+    }
+    .timer-steps .time {
+      font-size: 22px;
+      font-variant-numeric: tabular-nums;
+      color: var(--sub);
+      text-align: right;
+    }
+    /* いま注いでいる回 */
+    .timer-steps li.current {
+      margin: 0 -8px;
+      padding: 10px 8px;
+      border-radius: 12px;
+      background: var(--main);
+    }
+    .timer-steps li.current span { color: #fff; }
+
+    /* 画面の下に固定するボタン置き場 */
+    .timer-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 20;
+      padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+      background: var(--bg);
+      border-top: 1px solid var(--line);
+    }
+    .timer-bar-inner {
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    .big {
+      width: 100%;
+      min-height: 100px;
+      font-size: 26px;
+      font-weight: bold;
+      line-height: 1.3;
+      border: none;
+      border-radius: 18px;
+      background: var(--main);
+      color: #fff;
+      cursor: pointer;
+      user-select: none;
+    }
+    .big small {
+      display: block;
+      font-size: 18px;
+    }
+    .timer-bar .button-row button,
+    .timer-bar .secondary { min-height: 64px; }
+    button:disabled { opacity: 0.4; }
+
+    /* 記録画面：各投の時間の入力欄 */
+    .time-input {
+      width: 6em !important;
+      min-height: 48px !important;
+      font-size: 20px !important;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -425,7 +541,8 @@
     <ul class="steps" id="steps" hidden></ul>
     <p class="note" id="hint" hidden>各回の量は書き換えできます（空にすると自動に戻ります）。最後の1投は自動で計算します。</p>
     <button type="button" class="reset" id="resetButton">リセット（自動計算に戻す）</button>
-    <button type="button" class="primary" id="recordButton">📝 この内容で記録</button>
+    <button type="button" class="primary" id="timerButton">⏱ タイマーで抽出</button>
+    <button type="button" class="secondary" id="recordButton">📝 この内容で記録</button>
     <p class="error" id="recordError" hidden></p>
   </section>
   </div>
@@ -456,6 +573,14 @@
     <section class="card">
       <h2>計算機の値</h2>
       <dl class="info" id="formRecipe"></dl>
+    </section>
+
+    <section class="card">
+      <h2>各投のタイミング（分:秒）</h2>
+      <p class="note">注ぎ始めた時間です。タイマーを使うと自動で入ります。空のままでもOKです。</p>
+      <!-- 中身は JavaScript で作る -->
+      <ul class="steps" id="formTimes"></ul>
+      <p class="error" id="pourTimesError" hidden>「0:45」のように 分:秒 で入れてください。</p>
     </section>
 
     <section class="card">
@@ -541,6 +666,32 @@
       <button type="button" class="secondary danger" id="deleteButton">削除</button>
     </div>
     <button type="button" class="secondary" id="backButton">一覧に戻る</button>
+  </div>
+
+  <!-- ===== 画面5：抽出タイマー ===== -->
+  <div id="timerView" hidden>
+    <div class="timer-head">
+      <button type="button" class="back" id="timerBack">← 計算機</button>
+      <span class="timer-recipe" id="timerRecipe"></span>
+    </div>
+    <p class="clock" id="clock">0:00</p>
+    <p class="timer-status" id="timerStatus"></p>
+    <section class="card">
+      <!-- 各回の「累計g」と「注ぎ始めた時間」。中身は JavaScript で作る -->
+      <ul class="steps timer-steps" id="timerSteps"></ul>
+    </section>
+    <p class="note" id="wakeNote" hidden></p>
+
+    <!-- 画面の下に固定するボタン -->
+    <div class="timer-bar">
+      <div class="timer-bar-inner">
+        <button type="button" class="big" id="timerMain">スタート</button>
+        <div class="button-row">
+          <button type="button" class="secondary" id="timerUndo">↩ 1つ戻す</button>
+          <button type="button" class="secondary" id="timerSub">終了</button>
+        </div>
+      </div>
+    </div>
   </div>
 </main>
 
@@ -834,6 +985,8 @@
   let currentId = null; // 詳細画面で表示している記録のID
   let formRating = 0;   // 入力中の評価（0＝未選択）
   let formRoast = "";   // 入力中の焙煎度（""＝未選択）
+  let formTimeInputs = [];     // 各投の時間の入力欄
+  let draftFromTimer = false;  // タイマーから記録を始めたかどうか
 
   // 画面の部品
   const $ = id => document.getElementById(id);
@@ -847,9 +1000,11 @@
 
   // ----- 画面の切り替え -----
   function showView(name) {
-    ["calcView", "listView", "formView", "detailView"].forEach(view => {
+    ["calcView", "listView", "formView", "detailView", "timerView"].forEach(view => {
       $(view).hidden = view !== name;
     });
+    // タイマー中は押し間違いを防ぐため、上のタブを隠す
+    document.querySelector(".tabs").hidden = name === "timerView";
     $("tabCalc").classList.toggle("selected", name === "calcView");
     $("tabRecords").classList.toggle("selected", name !== "calcView");
     window.scrollTo(0, 0);
@@ -902,6 +1057,11 @@
       grind: text(r.grind),
       timeSec: Number.isInteger(r.timeSec) && r.timeSec >= 0 ? r.timeSec : null,
       memo: text(r.memo),
+      // 各投の注ぎ始めの時間（秒）。蒸らしが先頭。わからない回は null
+      pourTimes: r.recipe.totals.map((_, i) => {
+        const v = Array.isArray(r.pourTimes) ? r.pourTimes[i] : null;
+        return Number.isInteger(v) && v >= 0 ? v : null;
+      }),
       recipe: r.recipe
     };
   }
@@ -954,15 +1114,24 @@
     dl.append(dt, dd);
   }
 
-  // 計算機の値を表示する
-  function showRecipe(dl, recipe) {
+  // 何回目かを名前にする（0 → "蒸らし"、1 → "1投目"…）
+  function stepName(i) {
+    return i === 0 ? "蒸らし" : i + "投目";
+  }
+
+  // 計算機の値を表示する（pourTimes があれば各投の時間も並べる）
+  function showRecipe(dl, recipe, pourTimes) {
     dl.innerHTML = "";
     addInfo(dl, "比率", "1:" + format(recipe.ratio));
     addInfo(dl, "豆", format(recipe.beans) + " g");
     addInfo(dl, "湯量", format(recipe.water) + " ml");
-    addInfo(dl, "蒸らし", format(recipe.bloom) + " g");
     addInfo(dl, "注ぐ回数", recipe.pours.length + "回（蒸らしのあと）");
-    addInfo(dl, "注ぎ方", recipe.totals.map(format).join(" → ") + " g");
+    // 例："1投目  100 g ― 0:45"（スケールの累計と、注ぎ始めた時間）
+    const lines = recipe.totals.map((total, i) => {
+      const time = pourTimes && pourTimes[i] !== null ? " ― " + secToText(pourTimes[i]) : "";
+      return stepName(i) + "  " + format(total) + " g" + time;
+    });
+    addInfo(dl, "注ぎ方", lines.join("\n"));
   }
 
   // ----- 計算機 →「この内容で記録」 -----
@@ -984,22 +1153,26 @@
     };
   }
 
-  $("recordButton").addEventListener("click", () => {
+  // 計算機の値をチェックして返す。おかしければ赤字を出して null を返す
+  function checkedRecipe() {
     const error = $("recordError");
     const recipe = captureRecipe();
     if (!recipe) {
       error.textContent = "先に豆の量かお湯の量を入力してください。";
       error.hidden = false;
-      return;
+      return null;
     }
     if (recipe.pours[recipe.pours.length - 1] < 0) {
-      error.textContent = "注ぐ量の合計が総湯量を超えています。直してから記録してください。";
+      error.textContent = "注ぐ量の合計が総湯量を超えています。直してから進んでください。";
       error.hidden = false;
-      return;
+      return null;
     }
     error.hidden = true;
+    return recipe;
+  }
 
-    // 新しい記録を作って、入力画面を開く
+  // 新しい記録を作って、入力画面を開く
+  function openNewRecord(recipe, timeSec, pourTimes) {
     openForm({
       id: newId(),
       date: new Date().toISOString(),
@@ -1009,10 +1182,18 @@
       shop: "",
       temp: null,
       grind: "",
-      timeSec: null,
+      timeSec: timeSec,
       memo: "",
+      pourTimes: pourTimes,
       recipe: recipe
     });
+  }
+
+  $("recordButton").addEventListener("click", () => {
+    const recipe = checkedRecipe();
+    if (!recipe) return;
+    draftFromTimer = false;
+    openNewRecord(recipe, null, recipe.totals.map(() => null));
   });
 
   // ----- 入力・編集画面 -----
@@ -1047,7 +1228,28 @@
     brewTimeInput.value = record.timeSec !== null ? secToText(record.timeSec) : "";
     memoInput.value = record.memo;
 
-    ["beanNameError", "ratingError", "brewTimeError"].forEach(id => $(id).hidden = true);
+    // 各投の時間の入力欄を、注ぐ回数ぶん作る
+    const timesList = $("formTimes");
+    timesList.innerHTML = "";
+    formTimeInputs = record.recipe.totals.map((total, i) => {
+      const li = document.createElement("li");
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = stepName(i);
+      const grams = document.createElement("span");
+      grams.textContent = format(total) + " g";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "time-input";
+      input.inputMode = "numeric";
+      input.placeholder = "0:00";
+      input.value = record.pourTimes[i] !== null ? secToText(record.pourTimes[i]) : "";
+      li.append(name, grams, input);
+      timesList.appendChild(li);
+      return input;
+    });
+
+    ["beanNameError", "ratingError", "brewTimeError", "pourTimesError"].forEach(id => $(id).hidden = true);
 
     // 過去に入れた豆の名前を候補にする（重なりは1つにまとめる）
     const names = [...new Set(records.map(r => r.beanName))];
@@ -1078,12 +1280,15 @@
   $("saveButton").addEventListener("click", () => {
     const beanName = beanNameInput.value.trim();
     const timeSec = textToSec(brewTimeInput.value);
+    const pourTimes = formTimeInputs.map(input => textToSec(input.value));
+    const pourTimesOk = !pourTimes.some(Number.isNaN);
 
     // 入力のチェック（おかしいところは赤字で知らせる）
     $("beanNameError").hidden = beanName !== "";
     $("ratingError").hidden = formRating > 0;
     $("brewTimeError").hidden = !Number.isNaN(timeSec);
-    if (beanName === "" || formRating === 0 || Number.isNaN(timeSec)) return;
+    $("pourTimesError").hidden = pourTimesOk;
+    if (beanName === "" || formRating === 0 || Number.isNaN(timeSec) || !pourTimesOk) return;
 
     const temp = parseFloat(tempInput.value);
     const record = {
@@ -1097,6 +1302,7 @@
       grind: grindInput.value.trim(),
       timeSec: timeSec,
       memo: memoInput.value.trim(),
+      pourTimes: pourTimes,
       recipe: draft.recipe
     };
 
@@ -1110,6 +1316,7 @@
     if (isEdit) {
       openDetail(record.id); // 編集のあとは詳細画面へ
     } else {
+      if (draftFromTimer) resetTimer(); // タイマーの結果は記録したので片付ける
       renderList();          // 新しい記録のあとは一覧へ
       showView("listView");
     }
@@ -1118,6 +1325,7 @@
   // やめるボタン
   $("cancelButton").addEventListener("click", () => {
     if (records.some(r => r.id === draft.id)) openDetail(draft.id);
+    else if (draftFromTimer) showView("timerView"); // タイマーの結果画面に戻る
     else showView("calcView");
   });
 
@@ -1182,7 +1390,7 @@
     addInfo(info, "挽き目", r.grind);
     addInfo(info, "抽出時間", r.timeSec !== null ? secToText(r.timeSec) : "");
     addInfo(info, "味のメモ", r.memo);
-    showRecipe($("detailRecipe"), r.recipe);
+    showRecipe($("detailRecipe"), r.recipe, r.pourTimes);
 
     showView("detailView");
   }
@@ -1270,6 +1478,229 @@
       $("backupMessage").textContent = "このファイルは読み込めませんでした。バックアップで書き出したファイルを選んでください。";
     });
   });
+
+  // =====================================================
+  // ⏱ 抽出タイマー
+  // =====================================================
+
+  // タイマーの状態
+  //   state  : "idle"（開始前）/ "running"（計測中）/ "done"（終了）
+  //   start  : スタートを押した時刻（ミリ秒）
+  //   laps   : 「次の注ぎ」を押した時間（秒）の並び。1投目、2投目…の順
+  //   end    : 終了した時間（秒）
+  //   recipe : タイマーを開いたときの計算機の値
+  const timer = { state: "idle", start: 0, laps: [], end: null, recipe: null };
+  let tickId = null;    // 時計を動かす仕組みの番号
+  let wakeLock = null;  // 画面を暗くしないための「鍵」
+
+  // スタートから何秒たったか
+  function elapsedSec() {
+    return Math.floor((Date.now() - timer.start) / 1000);
+  }
+
+  // 各投の注ぎ始めの時間（蒸らしは 0:00）
+  function timerPourTimes() {
+    return timer.state === "idle" ? [] : [0, ...timer.laps];
+  }
+
+  // 時計の数字だけ更新する（0.25秒ごとに呼ばれる）
+  function updateClock() {
+    let sec = 0;
+    if (timer.state === "running") sec = elapsedSec();
+    if (timer.state === "done") sec = timer.end;
+    $("clock").textContent = secToText(sec);
+  }
+
+  // タイマー画面をまるごと描き直す（ボタンを押したときに呼ぶ）
+  function renderTimer() {
+    const recipe = timer.recipe;
+    const times = timerPourTimes();
+    const nextIndex = times.length;                      // 次に注ぐ回
+    const hasNext = nextIndex < recipe.totals.length;    // まだ注ぐ回が残っているか
+
+    $("timerRecipe").textContent =
+      "豆" + format(recipe.beans) + "g・湯" + format(recipe.water) + "ml・1:" + format(recipe.ratio);
+    updateClock();
+
+    // 各回の「累計g」と「時間」の一覧
+    const list = $("timerSteps");
+    list.innerHTML = "";
+    recipe.totals.forEach((total, i) => {
+      const li = document.createElement("li");
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = stepName(i);
+      const grams = document.createElement("span");
+      grams.className = "grams";
+      grams.textContent = format(total) + " g";
+      const time = document.createElement("span");
+      time.className = "time";
+      time.textContent = times[i] !== undefined ? secToText(times[i]) : "―";
+      li.append(name, grams, time);
+      // いま注いでいる回に色をつける
+      if (timer.state === "running" && i === times.length - 1) li.classList.add("current");
+      list.appendChild(li);
+    });
+
+    // 状態ごとに、案内の文字とボタンを切り替える
+    const main = $("timerMain");
+    const sub = $("timerSub");
+    const status = $("timerStatus");
+    $("timerUndo").disabled = timer.state === "idle";
+
+    if (timer.state === "idle") {
+      status.textContent = "スタートを押したら、蒸らしのお湯を注ぎ始めます。";
+      main.innerHTML = "▶ スタート";
+      sub.hidden = true;
+    } else if (timer.state === "running") {
+      const now = times.length - 1;
+      status.textContent = stepName(now) + "：スケール " + format(recipe.totals[now]) + " g まで" +
+        (hasNext ? "" : "。落ち切ったら終了");
+      if (hasNext) {
+        main.innerHTML = "次の注ぎ<small>" + stepName(nextIndex) + "（" + format(recipe.totals[nextIndex]) + " g まで）</small>";
+        sub.textContent = "■ 終了";
+        sub.hidden = false;
+      } else {
+        main.innerHTML = "■ 終了<small>落ち切ったら押す</small>";
+        sub.hidden = true;
+      }
+    } else {
+      status.textContent = "総抽出時間 " + secToText(timer.end);
+      main.innerHTML = "📝 この内容で記録";
+      sub.textContent = "最初から";
+      sub.hidden = false;
+    }
+    // 右のボタンが隠れているときは「1つ戻す」を横いっぱいにする
+    sub.parentElement.classList.toggle("single", sub.hidden);
+
+    // 計算機の「タイマー」ボタンの文字も合わせる
+    $("timerButton").textContent =
+      timer.state === "running" ? "⏱ タイマーに戻る（計測中）" :
+      timer.state === "done" ? "⏱ タイマーに戻る（終了済み）" : "⏱ タイマーで抽出";
+  }
+
+  // 時計を動かす／止める
+  function startTick() {
+    stopTick();
+    tickId = setInterval(updateClock, 250);
+  }
+  function stopTick() {
+    clearInterval(tickId);
+    tickId = null;
+  }
+
+  // 画面を暗くしないようにする（対応しているブラウザだけ）
+  async function requestWakeLock() {
+    if (!("wakeLock" in navigator)) return;
+    try {
+      wakeLock = await navigator.wakeLock.request("screen");
+    } catch (e) {
+      wakeLock = null;
+    }
+  }
+  function releaseWakeLock() {
+    if (wakeLock) wakeLock.release().catch(() => {});
+    wakeLock = null;
+  }
+  // 別のアプリから戻ってきたとき、計測中なら鍵をかけ直す（離れると鍵は自動で外れるため）
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && timer.state === "running") requestWakeLock();
+  });
+
+  // 押したことが指で分かるように、少し震わせる（Androidのみ）
+  function buzz() {
+    if (navigator.vibrate) navigator.vibrate(40);
+  }
+
+  // 計測を終える
+  function finishTimer() {
+    timer.end = elapsedSec();
+    timer.state = "done";
+    stopTick();
+    releaseWakeLock();
+  }
+
+  // 開始前の状態に戻す
+  function resetTimer() {
+    timer.state = "idle";
+    timer.laps = [];
+    timer.end = null;
+    stopTick();
+    releaseWakeLock();
+    renderTimer();
+  }
+
+  // 計算機の「タイマーで抽出」ボタン
+  $("timerButton").addEventListener("click", () => {
+    // 開始前なら、今の計算機の値でタイマーを準備する
+    if (timer.state === "idle") {
+      const recipe = checkedRecipe();
+      if (!recipe) return;
+      timer.recipe = recipe;
+    }
+    renderTimer();
+    const note = $("wakeNote");
+    note.hidden = "wakeLock" in navigator;
+    note.textContent = "※ このブラウザでは、画面が自動で暗くなるのを止められません。端末の設定で自動ロックを長めにしてください。";
+    showView("timerView");
+  });
+
+  // 大きいボタン（スタート／次の注ぎ／終了／記録）
+  $("timerMain").addEventListener("click", () => {
+    buzz();
+    if (timer.state === "idle") {
+      timer.start = Date.now();
+      timer.laps = [];
+      timer.state = "running";
+      startTick();
+      requestWakeLock();
+    } else if (timer.state === "running") {
+      const hasNext = timerPourTimes().length < timer.recipe.totals.length;
+      if (hasNext) timer.laps.push(elapsedSec()); // 今の時間を記録
+      else finishTimer();
+    } else {
+      // 終了後：各投の時間と総抽出時間を記録画面に渡す
+      const times = timerPourTimes();
+      draftFromTimer = true;
+      openNewRecord(timer.recipe, timer.end, timer.recipe.totals.map((_, i) => times[i] ?? null));
+      return;
+    }
+    renderTimer();
+  });
+
+  // 右下のボタン（計測中＝終了／終了後＝最初から）
+  $("timerSub").addEventListener("click", () => {
+    buzz();
+    if (timer.state === "running") {
+      finishTimer();
+      renderTimer();
+    } else if (timer.state === "done") {
+      if (confirm("タイマーを最初からやり直しますか？\n今回の時間は消えます。")) resetTimer();
+    }
+  });
+
+  // 1つ戻す
+  $("timerUndo").addEventListener("click", () => {
+    buzz();
+    if (timer.state === "done") {
+      // 終了を取り消して、計測を続ける
+      timer.state = "running";
+      timer.end = null;
+      startTick();
+      requestWakeLock();
+    } else if (timer.state === "running") {
+      if (timer.laps.length > 0) {
+        timer.laps.pop();       // 最後の「次の注ぎ」を取り消す
+      } else {
+        resetTimer();           // スタートを取り消す
+        return;
+      }
+    }
+    renderTimer();
+  });
+
+  // 「← 計算機」：タイマーは動かしたまま計算機に戻る
+  $("timerBack").addEventListener("click", () => showView("calcView"));
 
   // ===== ページを開いたときに1回だけ実行 =====
   load();
