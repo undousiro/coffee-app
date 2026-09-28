@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <!-- スマホの画面幅に合わせて表示する設定 -->
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>コーヒー比率計算機</title>
+  <title>コーヒーアプリ</title>
   <style>
     /* ===== 色の設定（ここを変えると全体の色が変わる） ===== */
     :root {
@@ -21,7 +21,7 @@
 
     body {
       margin: 0;
-      padding: 16px;
+      padding: 0 16px 32px;
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
@@ -188,11 +188,190 @@
       color: #a33a2a;
       font-weight: bold;
     }
+
+    /* ===== 画面上部の切り替えタブ（スクロールしても上に残る） ===== */
+    .tabs {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 12px 0;
+      background: var(--bg);
+    }
+    .tabs button {
+      min-height: 52px;
+      font-size: 18px;
+      font-weight: bold;
+      border: none;
+      border-radius: 12px;
+      background: var(--line);
+      color: var(--main-dark);
+      cursor: pointer;
+    }
+    .tabs button.selected {
+      background: var(--main);
+      color: #fff;
+    }
+
+    /* ===== 大きなボタン ===== */
+    .primary,
+    .secondary {
+      width: 100%;
+      min-height: 56px;
+      margin-top: 12px;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+    .primary {
+      border: none;
+      background: var(--main);
+      color: #fff;
+    }
+    .secondary {
+      border: 2px solid var(--main);
+      background: var(--card);
+      color: var(--main);
+    }
+    .secondary.danger {
+      border-color: #a33a2a;
+      color: #a33a2a;
+    }
+    /* ボタンを2つ横に並べる */
+    .button-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .button-row button { margin-top: 0; }
+
+    /* ===== 記録の入力欄 ===== */
+    .field { margin-bottom: 18px; }
+    .field:last-child { margin-bottom: 0; }
+    .required {
+      margin-left: 6px;
+      font-size: 13px;
+      color: #a33a2a;
+    }
+    input[type="text"],
+    textarea {
+      width: 100%;
+      min-height: 52px;
+      padding: 8px 12px;
+      font-size: 18px;
+      font-family: inherit;
+      border: 2px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--text);
+    }
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+    input[type="text"]:focus,
+    textarea:focus {
+      outline: none;
+      border-color: var(--main);
+    }
+    .error {
+      margin: 4px 0 0;
+      font-size: 14px;
+      font-weight: bold;
+      color: #a33a2a;
+    }
+
+    /* 評価の星 */
+    .stars { display: flex; gap: 4px; }
+    .stars button {
+      flex: 1;
+      min-height: 52px;
+      padding: 0;
+      font-size: 32px;
+      line-height: 1;
+      border: none;
+      background: none;
+      color: var(--line);
+      cursor: pointer;
+    }
+    .stars button.on { color: #c8902e; }
+    .star-text { color: #c8902e; letter-spacing: 1px; }
+
+    /* 「項目名：内容」の一覧表示 */
+    dl.info {
+      display: grid;
+      grid-template-columns: 6em 1fr;
+      gap: 8px 12px;
+      margin: 0;
+      font-size: 16px;
+    }
+    dl.info dt { color: var(--sub); }
+    dl.info dd {
+      margin: 0;
+      font-weight: bold;
+      white-space: pre-wrap;    /* メモの改行をそのまま表示 */
+      overflow-wrap: anywhere;  /* 長い文字も画面内で折り返す */
+    }
+
+    /* ===== 記録の一覧 ===== */
+    .record-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .record-list button {
+      display: block;
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 14px 16px;
+      text-align: left;
+      font: inherit;
+      color: inherit;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      cursor: pointer;
+    }
+    .record-list .top {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 14px;
+      color: var(--sub);
+    }
+    .record-list .bean {
+      margin: 2px 0;
+      font-size: 20px;
+      font-weight: bold;
+      color: var(--main-dark);
+      overflow-wrap: anywhere;
+    }
+    .record-list .sub {
+      font-size: 14px;
+      color: var(--sub);
+    }
+    .empty {
+      padding: 24px 0;
+      text-align: center;
+      color: var(--sub);
+    }
   </style>
 </head>
 <body>
 <main>
-  <h1>☕ 比率計算機</h1>
+  <!-- 画面の切り替えタブ -->
+  <nav class="tabs">
+    <button type="button" id="tabCalc" class="selected">☕ 計算</button>
+    <button type="button" id="tabRecords">📒 記録</button>
+  </nav>
+
+  <!-- ===== 画面1：比率計算機 ===== -->
+  <div id="calcView">
+  <h1>比率計算機</h1>
 
   <!-- ① 比率を選ぶ -->
   <section class="card">
@@ -246,7 +425,123 @@
     <ul class="steps" id="steps" hidden></ul>
     <p class="note" id="hint" hidden>各回の量は書き換えできます（空にすると自動に戻ります）。最後の1投は自動で計算します。</p>
     <button type="button" class="reset" id="resetButton">リセット（自動計算に戻す）</button>
+    <button type="button" class="primary" id="recordButton">📝 この内容で記録</button>
+    <p class="error" id="recordError" hidden></p>
   </section>
+  </div>
+
+  <!-- ===== 画面2：記録の一覧 ===== -->
+  <div id="listView" hidden>
+    <h1>抽出記録</h1>
+    <ul class="record-list" id="recordList"></ul>
+    <p class="empty" id="emptyMessage">まだ記録がありません。<br>計算機の「この内容で記録」から追加できます。</p>
+
+    <section class="card">
+      <h2>バックアップ</h2>
+      <p class="note">記録はこのブラウザの中だけに保存されています。機種変更などに備えて、ときどきファイルに書き出してください。</p>
+      <div class="button-row">
+        <button type="button" class="secondary" id="backupButton">バックアップ</button>
+        <button type="button" class="secondary" id="restoreButton">復元</button>
+      </div>
+      <!-- 「復元」を押すと、この見えないファイル選択が開く -->
+      <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+      <p class="note" id="backupMessage"></p>
+    </section>
+  </div>
+
+  <!-- ===== 画面3：記録の入力・編集 ===== -->
+  <div id="formView" hidden>
+    <h1 id="formTitle">記録する</h1>
+
+    <section class="card">
+      <h2>計算機の値</h2>
+      <dl class="info" id="formRecipe"></dl>
+    </section>
+
+    <section class="card">
+      <div class="field">
+        <label for="beanName">豆の名前<span class="required">必須</span></label>
+        <!-- list="beanNames"：過去に入れた名前を候補に出す -->
+        <input type="text" id="beanName" list="beanNames" placeholder="例：エチオピア イルガチェフェ">
+        <datalist id="beanNames"></datalist>
+        <p class="error" id="beanNameError" hidden>豆の名前を入れてください。</p>
+      </div>
+
+      <div class="field">
+        <label>評価<span class="required">必須</span></label>
+        <div class="stars" id="stars">
+          <button type="button" data-star="1" aria-label="星1">★</button>
+          <button type="button" data-star="2" aria-label="星2">★</button>
+          <button type="button" data-star="3" aria-label="星3">★</button>
+          <button type="button" data-star="4" aria-label="星4">★</button>
+          <button type="button" data-star="5" aria-label="星5">★</button>
+        </div>
+        <p class="error" id="ratingError" hidden>★を選んでください。</p>
+      </div>
+
+      <div class="field">
+        <label>焙煎度</label>
+        <div class="choices three" id="roastButtons">
+          <button type="button" data-roast="浅">浅</button>
+          <button type="button" data-roast="中">中</button>
+          <button type="button" data-roast="深">深</button>
+        </div>
+        <p class="note">もう一度押すと選択を外せます。</p>
+      </div>
+
+      <div class="field">
+        <label for="shop">購入店</label>
+        <input type="text" id="shop" placeholder="例：〇〇珈琲店">
+      </div>
+
+      <div class="field">
+        <label for="temp">湯温</label>
+        <div class="input-row">
+          <input type="number" id="temp" inputmode="decimal" min="0" max="100" step="1" placeholder="例：90">
+          <span class="unit">℃</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="grind">挽き目</label>
+        <input type="text" id="grind" placeholder="例：中細挽き、ダイヤル15">
+      </div>
+
+      <div class="field">
+        <label for="brewTime">抽出時間（分:秒）</label>
+        <input type="text" id="brewTime" inputmode="numeric" placeholder="例：2:30">
+        <p class="error" id="brewTimeError" hidden>「2:30」のように 分:秒 で入れてください。</p>
+      </div>
+
+      <div class="field">
+        <label for="memo">味のメモ</label>
+        <textarea id="memo" placeholder="例：酸味が明るい。冷めると甘さが出る。"></textarea>
+      </div>
+    </section>
+
+    <div class="button-row">
+      <button type="button" class="secondary" id="cancelButton">やめる</button>
+      <button type="button" class="primary" id="saveButton">保存する</button>
+    </div>
+  </div>
+
+  <!-- ===== 画面4：記録の詳細 ===== -->
+  <div id="detailView" hidden>
+    <h1 id="detailTitle"></h1>
+    <section class="card">
+      <h2>記録</h2>
+      <dl class="info" id="detailInfo"></dl>
+    </section>
+    <section class="card">
+      <h2>計算機の値</h2>
+      <dl class="info" id="detailRecipe"></dl>
+    </section>
+    <div class="button-row">
+      <button type="button" class="secondary" id="editButton">編集</button>
+      <button type="button" class="secondary danger" id="deleteButton">削除</button>
+    </div>
+    <button type="button" class="secondary" id="backButton">一覧に戻る</button>
+  </div>
 </main>
 
 <script>
@@ -286,6 +581,9 @@
 
   // 比率が変わったり、量が入力されたりしたら、ここで計算し直す
   function calculate() {
+    // 「この内容で記録」のエラーが出ていたら消す
+    document.getElementById("recordError").hidden = true;
+
     // 最後に入力された方をもとに、もう片方を計算する
     if (lastInput === "beans") {
       const beans = parseFloat(beansInput.value);
@@ -524,10 +822,460 @@
     save();
   });
 
+  // =====================================================
+  // ② 抽出記録
+  // =====================================================
+
+  // ブラウザに記録を保存するときの名前
+  const RECORDS_KEY = "coffee-records";
+
+  let records = [];     // すべての記録
+  let draft = null;     // いま入力・編集している記録
+  let currentId = null; // 詳細画面で表示している記録のID
+  let formRating = 0;   // 入力中の評価（0＝未選択）
+  let formRoast = "";   // 入力中の焙煎度（""＝未選択）
+
+  // 画面の部品
+  const $ = id => document.getElementById(id);
+  const recordList = $("recordList");
+  const beanNameInput = $("beanName");
+  const shopInput = $("shop");
+  const tempInput = $("temp");
+  const grindInput = $("grind");
+  const brewTimeInput = $("brewTime");
+  const memoInput = $("memo");
+
+  // ----- 画面の切り替え -----
+  function showView(name) {
+    ["calcView", "listView", "formView", "detailView"].forEach(view => {
+      $(view).hidden = view !== name;
+    });
+    $("tabCalc").classList.toggle("selected", name === "calcView");
+    $("tabRecords").classList.toggle("selected", name !== "calcView");
+    window.scrollTo(0, 0);
+  }
+
+  // ----- ブラウザへの保存と読み込み -----
+  function loadRecords() {
+    try {
+      const data = JSON.parse(localStorage.getItem(RECORDS_KEY));
+      records = Array.isArray(data) ? data.filter(isValidRecord).map(normalizeRecord) : [];
+    } catch (e) {
+      records = [];
+    }
+  }
+
+  function saveRecords() {
+    try {
+      localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+      return true;
+    } catch (e) {
+      alert("記録を保存できませんでした。ブラウザの設定（プライベートモードなど）を確認してください。");
+      return false;
+    }
+  }
+
+  // 記録として正しい形かどうか調べる（復元のときに使う）
+  function isValidRecord(r) {
+    const recipe = r && r.recipe;
+    return !!r && typeof r === "object" &&
+      typeof r.id === "string" &&
+      typeof r.date === "string" && !Number.isNaN(Date.parse(r.date)) &&
+      typeof r.beanName === "string" && r.beanName !== "" &&
+      [1, 2, 3, 4, 5].includes(r.rating) &&
+      !!recipe && typeof recipe === "object" &&
+      ["beans", "water", "ratio", "bloom"].every(key => typeof recipe[key] === "number") &&
+      Array.isArray(recipe.pours) && Array.isArray(recipe.totals);
+  }
+
+  // 任意の項目が欠けていても困らないよう、形をそろえる
+  function normalizeRecord(r) {
+    const text = v => (typeof v === "string" ? v : "");
+    return {
+      id: r.id,
+      date: r.date,
+      beanName: r.beanName,
+      rating: r.rating,
+      roast: ["浅", "中", "深"].includes(r.roast) ? r.roast : "",
+      shop: text(r.shop),
+      temp: typeof r.temp === "number" ? r.temp : null,
+      grind: text(r.grind),
+      timeSec: Number.isInteger(r.timeSec) && r.timeSec >= 0 ? r.timeSec : null,
+      memo: text(r.memo),
+      recipe: r.recipe
+    };
+  }
+
+  // ----- 小さな道具 -----
+
+  // 記録ごとの番号（ID）を作る。時刻＋ランダムな文字で、重ならないようにする
+  function newId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  // 秒 → "2:30" の形の文字にする
+  function secToText(sec) {
+    return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0");
+  }
+
+  // "2:30" → 150（秒）にする。空なら null、形がおかしければ NaN
+  function textToSec(text) {
+    // 全角の数字やコロン（２：３０）も受け付けるよう、半角にそろえる
+    const t = text.trim()
+      .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+      .replace(/：/g, ":");
+    if (t === "") return null;
+    const match = t.match(/^(\d+):([0-5]\d)$/);
+    if (!match) return NaN;
+    return Number(match[1]) * 60 + Number(match[2]);
+  }
+
+  // 日付を "2026/9/28 07:30" の形にする
+  function formatDate(iso) {
+    const d = new Date(iso);
+    return d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate() + " " +
+      String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+
+  // 評価を "★★★☆☆" の形にする
+  function starText(n) {
+    return "★".repeat(n) + "☆".repeat(5 - n);
+  }
+
+  // 「項目名：内容」を1行追加する（内容が空なら何もしない）
+  // ※ textContent を使うので、入力された文字がそのまま安全に表示される
+  function addInfo(dl, label, value, className) {
+    if (value === "" || value === null || value === undefined) return;
+    const dt = document.createElement("dt");
+    const dd = document.createElement("dd");
+    dt.textContent = label;
+    dd.textContent = value;
+    if (className) dd.className = className;
+    dl.append(dt, dd);
+  }
+
+  // 計算機の値を表示する
+  function showRecipe(dl, recipe) {
+    dl.innerHTML = "";
+    addInfo(dl, "比率", "1:" + format(recipe.ratio));
+    addInfo(dl, "豆", format(recipe.beans) + " g");
+    addInfo(dl, "湯量", format(recipe.water) + " ml");
+    addInfo(dl, "蒸らし", format(recipe.bloom) + " g");
+    addInfo(dl, "注ぐ回数", recipe.pours.length + "回（蒸らしのあと）");
+    addInfo(dl, "注ぎ方", recipe.totals.map(format).join(" → ") + " g");
+  }
+
+  // ----- 計算機 →「この内容で記録」 -----
+
+  // 今の計算機の値を、記録用にまとめる
+  function captureRecipe() {
+    const plan = makePlan();
+    if (!plan) return null;
+    const round = n => Math.round(n * 10) / 10;
+    const amounts = [plan.bloom, ...plan.amounts];
+    let sum = 0;
+    return {
+      beans: parseFloat(beansInput.value),
+      water: plan.water,
+      ratio: ratio,
+      bloom: round(plan.bloom),
+      pours: plan.amounts.map(round),                 // 各回に注ぐ量
+      totals: amounts.map(a => round(sum += a))       // スケールの累計
+    };
+  }
+
+  $("recordButton").addEventListener("click", () => {
+    const error = $("recordError");
+    const recipe = captureRecipe();
+    if (!recipe) {
+      error.textContent = "先に豆の量かお湯の量を入力してください。";
+      error.hidden = false;
+      return;
+    }
+    if (recipe.pours[recipe.pours.length - 1] < 0) {
+      error.textContent = "注ぐ量の合計が総湯量を超えています。直してから記録してください。";
+      error.hidden = false;
+      return;
+    }
+    error.hidden = true;
+
+    // 新しい記録を作って、入力画面を開く
+    openForm({
+      id: newId(),
+      date: new Date().toISOString(),
+      beanName: "",
+      rating: 0,
+      roast: "",
+      shop: "",
+      temp: null,
+      grind: "",
+      timeSec: null,
+      memo: "",
+      recipe: recipe
+    });
+  });
+
+  // ----- 入力・編集画面 -----
+
+  function setRating(n) {
+    formRating = n;
+    $("stars").querySelectorAll("button").forEach(b => {
+      b.classList.toggle("on", Number(b.dataset.star) <= n);
+    });
+  }
+
+  function setRoast(value) {
+    formRoast = value;
+    $("roastButtons").querySelectorAll("button").forEach(b => {
+      b.classList.toggle("selected", b.dataset.roast === value);
+    });
+  }
+
+  // 入力画面を開く（record の内容を入力欄に入れる）
+  function openForm(record) {
+    draft = record;
+    const isEdit = records.some(r => r.id === record.id);
+    $("formTitle").textContent = isEdit ? "記録を編集" : "記録する";
+    showRecipe($("formRecipe"), record.recipe);
+
+    beanNameInput.value = record.beanName;
+    setRating(record.rating);
+    setRoast(record.roast);
+    shopInput.value = record.shop;
+    tempInput.value = record.temp !== null ? record.temp : "";
+    grindInput.value = record.grind;
+    brewTimeInput.value = record.timeSec !== null ? secToText(record.timeSec) : "";
+    memoInput.value = record.memo;
+
+    ["beanNameError", "ratingError", "brewTimeError"].forEach(id => $(id).hidden = true);
+
+    // 過去に入れた豆の名前を候補にする（重なりは1つにまとめる）
+    const names = [...new Set(records.map(r => r.beanName))];
+    $("beanNames").innerHTML = "";
+    names.forEach(name => {
+      const option = document.createElement("option");
+      option.value = name;
+      $("beanNames").appendChild(option);
+    });
+
+    showView("formView");
+  }
+
+  // 星を押したとき
+  $("stars").addEventListener("click", e => {
+    const button = e.target.closest("button");
+    if (button) setRating(Number(button.dataset.star));
+  });
+
+  // 焙煎度を押したとき（同じものをもう一度押すと外れる）
+  $("roastButtons").addEventListener("click", e => {
+    const button = e.target.closest("button");
+    if (!button) return;
+    setRoast(formRoast === button.dataset.roast ? "" : button.dataset.roast);
+  });
+
+  // 保存ボタン
+  $("saveButton").addEventListener("click", () => {
+    const beanName = beanNameInput.value.trim();
+    const timeSec = textToSec(brewTimeInput.value);
+
+    // 入力のチェック（おかしいところは赤字で知らせる）
+    $("beanNameError").hidden = beanName !== "";
+    $("ratingError").hidden = formRating > 0;
+    $("brewTimeError").hidden = !Number.isNaN(timeSec);
+    if (beanName === "" || formRating === 0 || Number.isNaN(timeSec)) return;
+
+    const temp = parseFloat(tempInput.value);
+    const record = {
+      id: draft.id,
+      date: draft.date,
+      beanName: beanName,
+      rating: formRating,
+      roast: formRoast,
+      shop: shopInput.value.trim(),
+      temp: Number.isNaN(temp) ? null : temp,
+      grind: grindInput.value.trim(),
+      timeSec: timeSec,
+      memo: memoInput.value.trim(),
+      recipe: draft.recipe
+    };
+
+    // すでにある記録なら置きかえ、新しければ追加
+    const index = records.findIndex(r => r.id === record.id);
+    const isEdit = index >= 0;
+    if (isEdit) records[index] = record;
+    else records.push(record);
+    if (!saveRecords()) return;
+
+    if (isEdit) {
+      openDetail(record.id); // 編集のあとは詳細画面へ
+    } else {
+      renderList();          // 新しい記録のあとは一覧へ
+      showView("listView");
+    }
+  });
+
+  // やめるボタン
+  $("cancelButton").addEventListener("click", () => {
+    if (records.some(r => r.id === draft.id)) openDetail(draft.id);
+    else showView("calcView");
+  });
+
+  // ----- 一覧画面 -----
+
+  function renderList() {
+    recordList.innerHTML = "";
+    $("emptyMessage").hidden = records.length > 0;
+
+    // 新しい順に並べる
+    const sorted = [...records].sort((a, b) => b.date.localeCompare(a.date));
+
+    sorted.forEach(r => {
+      const li = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+
+      const top = document.createElement("div");
+      top.className = "top";
+      const date = document.createElement("span");
+      date.textContent = formatDate(r.date);
+      const stars = document.createElement("span");
+      stars.className = "star-text";
+      stars.textContent = starText(r.rating);
+      top.append(date, stars);
+
+      const bean = document.createElement("div");
+      bean.className = "bean";
+      bean.textContent = r.beanName;
+
+      const sub = document.createElement("div");
+      sub.className = "sub";
+      const parts = [];
+      if (r.roast) parts.push(r.roast + "煎り");
+      parts.push("豆" + format(r.recipe.beans) + "g");
+      parts.push("湯" + format(r.recipe.water) + "ml");
+      parts.push("1:" + format(r.recipe.ratio));
+      sub.textContent = parts.join("・");
+
+      button.append(top, bean, sub);
+      button.addEventListener("click", () => openDetail(r.id)); // タップで詳細へ
+      li.appendChild(button);
+      recordList.appendChild(li);
+    });
+  }
+
+  // ----- 詳細画面 -----
+
+  function openDetail(id) {
+    const r = records.find(record => record.id === id);
+    if (!r) return;
+    currentId = id;
+
+    $("detailTitle").textContent = r.beanName;
+    const info = $("detailInfo");
+    info.innerHTML = "";
+    addInfo(info, "日付", formatDate(r.date));
+    addInfo(info, "評価", starText(r.rating), "star-text");
+    addInfo(info, "焙煎度", r.roast ? r.roast + "煎り" : "");
+    addInfo(info, "購入店", r.shop);
+    addInfo(info, "湯温", r.temp !== null ? r.temp + " ℃" : "");
+    addInfo(info, "挽き目", r.grind);
+    addInfo(info, "抽出時間", r.timeSec !== null ? secToText(r.timeSec) : "");
+    addInfo(info, "味のメモ", r.memo);
+    showRecipe($("detailRecipe"), r.recipe);
+
+    showView("detailView");
+  }
+
+  $("editButton").addEventListener("click", () => {
+    const r = records.find(record => record.id === currentId);
+    if (r) openForm(r);
+  });
+
+  $("deleteButton").addEventListener("click", () => {
+    const r = records.find(record => record.id === currentId);
+    if (!r) return;
+    if (!confirm("「" + r.beanName + "」（" + formatDate(r.date) + "）の記録を削除しますか？\n元に戻せません。")) return;
+    records = records.filter(record => record.id !== currentId);
+    saveRecords();
+    renderList();
+    showView("listView");
+  });
+
+  $("backButton").addEventListener("click", () => showView("listView"));
+
+  // ----- タブ -----
+  $("tabCalc").addEventListener("click", () => showView("calcView"));
+  $("tabRecords").addEventListener("click", () => {
+    renderList();
+    showView("listView");
+  });
+
+  // ----- バックアップ（ファイルに書き出す） -----
+  $("backupButton").addEventListener("click", () => {
+    const data = {
+      app: "coffee-app",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      records: records
+    };
+    const today = new Date();
+    const fileName = "coffee-backup-" + today.getFullYear() +
+      String(today.getMonth() + 1).padStart(2, "0") +
+      String(today.getDate()).padStart(2, "0") + ".json";
+
+    // 記録を文字にしてファイルを作り、ダウンロードさせる
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = fileName;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+
+    $("backupMessage").textContent = records.length + "件の記録を「" + fileName + "」に書き出しました。";
+  });
+
+  // ----- 復元（ファイルから読み込む） -----
+  $("restoreButton").addEventListener("click", () => $("restoreFile").click());
+
+  $("restoreFile").addEventListener("change", e => {
+    const file = e.target.files[0];
+    e.target.value = ""; // 同じファイルをもう一度選べるように空にする
+    if (!file) return;
+
+    file.text().then(text => {
+      const data = JSON.parse(text);
+      const list = Array.isArray(data) ? data : data.records;
+      if (!Array.isArray(list)) throw new Error("形が違う");
+
+      const valid = list.filter(isValidRecord).map(normalizeRecord);
+      if (valid.length === 0) throw new Error("記録がない");
+
+      // 同じIDの記録はファイルの内容で上書き、ないものは追加する
+      let added = 0;
+      valid.forEach(r => {
+        const index = records.findIndex(x => x.id === r.id);
+        if (index >= 0) {
+          records[index] = r;
+        } else {
+          records.push(r);
+          added++;
+        }
+      });
+      if (!saveRecords()) return;
+      renderList();
+      $("backupMessage").textContent =
+        valid.length + "件を読み込みました（新しく追加 " + added + "件、上書き " + (valid.length - added) + "件）。";
+    }).catch(() => {
+      $("backupMessage").textContent = "このファイルは読み込めませんでした。バックアップで書き出したファイルを選んでください。";
+    });
+  });
+
   // ===== ページを開いたときに1回だけ実行 =====
   load();
   setPours(pours);
   showSteps();
+  loadRecords();
 </script>
 </body>
 </html>
