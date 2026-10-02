@@ -365,6 +365,106 @@
       color: var(--sub);
     }
 
+    /* ===== 豆まわり ===== */
+    .record-list { margin-top: 12px; }
+    /* 飲み終わった豆は少し薄く */
+    .record-list li.finished button { opacity: 0.6; }
+    .tag {
+      display: inline-block;
+      margin-left: 8px;
+      padding: 2px 8px;
+      font-size: 12px;
+      font-weight: bold;
+      vertical-align: middle;
+      border-radius: 999px;
+      background: var(--line);
+      color: var(--main-dark);
+    }
+    .center { text-align: center; margin: 0 0 8px; }
+    .section-title {
+      margin: 24px 0 0;
+      font-size: 18px;
+      color: var(--main);
+    }
+    .section-gap { margin-top: 16px; }
+
+    /* チェックボックス付きの行 */
+    label.check-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 48px;
+      font-size: 16px;
+      color: var(--text);
+    }
+    .check-row input,
+    .merge-list input {
+      width: 24px;
+      height: 24px;
+      flex: none;
+      accent-color: var(--main);
+    }
+
+    /* 選択欄・日付欄 */
+    select,
+    input[type="date"] {
+      width: 100%;
+      min-height: 52px;
+      padding: 8px 12px;
+      font-size: 18px;
+      font-family: inherit;
+      border: 2px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--text);
+    }
+    select:focus,
+    input[type="date"]:focus {
+      outline: none;
+      border-color: var(--main);
+    }
+
+    /* 豆をまとめる画面の一覧 */
+    .merge-list {
+      list-style: none;
+      margin: 12px 0;
+      padding: 0;
+    }
+    .merge-list label {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 8px;
+      padding: 12px 14px;
+      font-size: 17px;
+      color: var(--text);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      cursor: pointer;
+    }
+    .merge-list .merge-name { font-weight: bold; overflow-wrap: anywhere; }
+    .merge-list .count { font-size: 14px; color: var(--sub); }
+    .merge-list .conflict {
+      display: block;
+      margin-top: 4px;
+      font-size: 13px;
+      font-weight: bold;
+      color: #a33a2a;
+    }
+
+    /* 「ベストレシピを読み込みました」のお知らせ */
+    .loaded {
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      font-size: 15px;
+      font-weight: bold;
+      color: var(--main-dark);
+      background: var(--card);
+      border: 2px solid var(--main);
+      border-radius: 12px;
+    }
+
     /* ボタンを素早く押しても画面が拡大されないようにする */
     button { touch-action: manipulation; }
 
@@ -488,6 +588,7 @@
   <!-- ===== 画面1：比率計算機 ===== -->
   <div id="calcView">
   <h1>比率計算機</h1>
+  <p class="loaded" id="loadedNote" hidden></p>
 
   <!-- ① 比率を選ぶ -->
   <section class="card">
@@ -547,26 +648,101 @@
   </section>
   </div>
 
-  <!-- ===== 画面2：記録の一覧 ===== -->
-  <div id="listView" hidden>
-    <h1>抽出記録</h1>
-    <ul class="record-list" id="recordList"></ul>
-    <p class="empty" id="emptyMessage">まだ記録がありません。<br>計算機の「この内容で記録」から追加できます。</p>
+  <!-- ===== 画面2：豆の一覧（記録タブのトップ） ===== -->
+  <div id="beansView" hidden>
+    <h1>豆と記録</h1>
+    <button type="button" class="primary" id="addBeanButton">＋ 豆を登録</button>
+    <ul class="record-list" id="beanList"></ul>
+    <p class="empty" id="beansEmpty">まだ豆がありません。<br>「＋ 豆を登録」か、計算機の「この内容で記録」から追加できます。</p>
+    <label class="check-row" id="finishedRow">
+      <input type="checkbox" id="showFinished"> 飲み終わった豆も表示 <span id="finishedCount"></span>
+    </label>
+    <button type="button" class="secondary" id="openMergeButton">豆をまとめる（名前の表記ゆれを統合）</button>
 
-    <section class="card">
+    <section class="card section-gap">
       <h2>バックアップ</h2>
-      <p class="note">記録はこのブラウザの中だけに保存されています。機種変更などに備えて、ときどきファイルに書き出してください。</p>
+      <p class="note">豆と記録はこのブラウザの中だけに保存されています。機種変更などに備えて、ときどきファイルに書き出してください。</p>
       <div class="button-row">
         <button type="button" class="secondary" id="backupButton">バックアップ</button>
         <button type="button" class="secondary" id="restoreButton">復元</button>
       </div>
       <!-- 「復元」を押すと、この見えないファイル選択が開く -->
       <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+      <button type="button" class="secondary" id="legacyBackupButton" hidden>豆ごとにまとめる前のデータを保存</button>
       <p class="note" id="backupMessage"></p>
     </section>
   </div>
 
-  <!-- ===== 画面3：記録の入力・編集 ===== -->
+  <!-- ===== 画面3：豆の画面（豆の情報と、その豆の記録） ===== -->
+  <div id="beanView" hidden>
+    <h1 id="beanTitle"></h1>
+    <p class="center" id="beanFinishedTag" hidden><span class="tag">飲み終わった</span></p>
+    <button type="button" class="primary" id="bestRecipeButton">☕ この豆のベストレシピで淹れる</button>
+    <p class="note" id="bestRecipeNote"></p>
+
+    <section class="card section-gap">
+      <h2>豆の情報</h2>
+      <dl class="info" id="beanInfo"></dl>
+      <div class="button-row">
+        <button type="button" class="secondary" id="editBeanButton">編集</button>
+        <button type="button" class="secondary" id="finishBeanButton">飲み終わった</button>
+      </div>
+      <div class="button-row">
+        <button type="button" class="secondary" id="mergeBeanButton">別の豆と統合</button>
+        <button type="button" class="secondary danger" id="deleteBeanButton">削除</button>
+      </div>
+      <p class="note" id="deleteBeanNote" hidden>記録が残っている豆は削除できません。別の豆と統合するか、先に記録を削除してください。</p>
+    </section>
+
+    <h2 class="section-title">この豆の記録（<span id="beanRecordCount"></span>件）</h2>
+    <ul class="record-list" id="beanRecordList"></ul>
+    <p class="empty" id="beanRecordsEmpty">まだ記録がありません。<br>計算機の「この内容で記録」から追加できます。</p>
+    <button type="button" class="secondary" id="beanBackButton">豆の一覧に戻る</button>
+  </div>
+
+  <!-- ===== 画面4：豆の登録・編集 ===== -->
+  <div id="beanFormView" hidden>
+    <h1 id="beanFormTitle">豆を登録</h1>
+    <section class="card">
+      <div class="field">
+        <label for="beanFormName">豆の名前<span class="required">必須</span></label>
+        <input type="text" id="beanFormName" placeholder="例：エチオピア イルガチェフェ">
+        <p class="error" id="beanFormNameError" hidden></p>
+      </div>
+
+      <div class="field">
+        <label>焙煎度</label>
+        <div class="choices three" id="beanRoastButtons">
+          <button type="button" data-roast="浅">浅</button>
+          <button type="button" data-roast="中">中</button>
+          <button type="button" data-roast="深">深</button>
+        </div>
+        <p class="note">もう一度押すと選択を外せます。</p>
+      </div>
+
+      <div class="field">
+        <label for="beanShop">購入店</label>
+        <input type="text" id="beanShop" placeholder="例：〇〇珈琲店">
+      </div>
+
+      <div class="field">
+        <label for="beanPurchaseDate">購入日</label>
+        <input type="date" id="beanPurchaseDate">
+      </div>
+
+      <div class="field">
+        <label for="beanMemo">メモ</label>
+        <textarea id="beanMemo" placeholder="例：精製方法、産地、焙煎日など"></textarea>
+      </div>
+    </section>
+
+    <div class="button-row">
+      <button type="button" class="secondary" id="beanFormCancel">やめる</button>
+      <button type="button" class="primary" id="beanFormSave">保存する</button>
+    </div>
+  </div>
+
+  <!-- ===== 画面5：記録の入力・編集 ===== -->
   <div id="formView" hidden>
     <h1 id="formTitle">記録する</h1>
 
@@ -585,11 +761,10 @@
 
     <section class="card">
       <div class="field">
-        <label for="beanName">豆の名前<span class="required">必須</span></label>
-        <!-- list="beanNames"：過去に入れた名前を候補に出す -->
-        <input type="text" id="beanName" list="beanNames" placeholder="例：エチオピア イルガチェフェ">
-        <datalist id="beanNames"></datalist>
-        <p class="error" id="beanNameError" hidden>豆の名前を入れてください。</p>
+        <label for="recordBean">豆<span class="required">必須</span></label>
+        <select id="recordBean"></select>
+        <button type="button" class="secondary" id="newBeanFromForm">＋ 新しい豆を登録</button>
+        <p class="error" id="recordBeanError" hidden>豆を選んでください。</p>
       </div>
 
       <div class="field">
@@ -602,21 +777,6 @@
           <button type="button" data-star="5" aria-label="星5">★</button>
         </div>
         <p class="error" id="ratingError" hidden>★を選んでください。</p>
-      </div>
-
-      <div class="field">
-        <label>焙煎度</label>
-        <div class="choices three" id="roastButtons">
-          <button type="button" data-roast="浅">浅</button>
-          <button type="button" data-roast="中">中</button>
-          <button type="button" data-roast="深">深</button>
-        </div>
-        <p class="note">もう一度押すと選択を外せます。</p>
-      </div>
-
-      <div class="field">
-        <label for="shop">購入店</label>
-        <input type="text" id="shop" placeholder="例：〇〇珈琲店">
       </div>
 
       <div class="field">
@@ -650,7 +810,7 @@
     </div>
   </div>
 
-  <!-- ===== 画面4：記録の詳細 ===== -->
+  <!-- ===== 画面6：記録の詳細 ===== -->
   <div id="detailView" hidden>
     <h1 id="detailTitle"></h1>
     <section class="card">
@@ -665,10 +825,35 @@
       <button type="button" class="secondary" id="editButton">編集</button>
       <button type="button" class="secondary danger" id="deleteButton">削除</button>
     </div>
-    <button type="button" class="secondary" id="backButton">一覧に戻る</button>
+    <button type="button" class="secondary" id="backButton">豆の画面に戻る</button>
   </div>
 
-  <!-- ===== 画面5：抽出タイマー ===== -->
+  <!-- ===== 画面7：豆をまとめる（移行の結果・表記ゆれの統合） ===== -->
+  <div id="mergeView" hidden>
+    <h1>豆をまとめる</h1>
+
+    <!-- 移行した直後だけ表示 -->
+    <section class="card" id="migrationCard" hidden>
+      <h2>記録を豆ごとにまとめました</h2>
+      <p id="migrationText"></p>
+      <p class="note" id="migrationBackupText"></p>
+      <button type="button" class="secondary" id="migrationBackupButton">まとめる前のデータをファイルに保存</button>
+    </section>
+
+    <p class="note">同じ豆が別々になっていたら、チェックを入れて「1つにまとめる」を押してください。名前の順に並んでいます。</p>
+    <ul class="merge-list" id="mergeList"></ul>
+
+    <section class="card">
+      <label for="mergeTarget">まとめた後に残す豆（名前と情報）</label>
+      <select id="mergeTarget"></select>
+      <button type="button" class="primary" id="mergeButton">選んだ豆を1つにまとめる</button>
+      <p class="note" id="mergeMessage"></p>
+    </section>
+
+    <button type="button" class="secondary" id="mergeDone">完了（豆の一覧へ）</button>
+  </div>
+
+  <!-- ===== 画面8：抽出タイマー ===== -->
   <div id="timerView" hidden>
     <div class="timer-head">
       <button type="button" class="back" id="timerBack">← 計算機</button>
@@ -732,8 +917,9 @@
 
   // 比率が変わったり、量が入力されたりしたら、ここで計算し直す
   function calculate() {
-    // 「この内容で記録」のエラーが出ていたら消す
+    // 「この内容で記録」のエラーや「読み込みました」のお知らせが出ていたら消す
     document.getElementById("recordError").hidden = true;
+    document.getElementById("loadedNote").hidden = true;
 
     // 最後に入力された方をもとに、もう片方を計算する
     if (lastInput === "beans") {
@@ -974,25 +1160,34 @@
   });
 
   // =====================================================
-  // ② 抽出記録
+  // ② 抽出記録（豆ごとにまとめる）
   // =====================================================
 
-  // ブラウザに記録を保存するときの名前
-  const RECORDS_KEY = "coffee-records";
+  // ブラウザに保存するときの名前
+  const BEANS_KEY = "coffee-beans";                       // 豆
+  const RECORDS_KEY = "coffee-records";                   // 抽出記録
+  const VERSION_KEY = "coffee-data-version";              // データの形（"2"＝豆ごとの形）
+  const LEGACY_BACKUP_KEY = "coffee-backup-before-beans"; // 豆ごとにまとめる前の自動バックアップ
 
-  let records = [];     // すべての記録
-  let draft = null;     // いま入力・編集している記録
-  let currentId = null; // 詳細画面で表示している記録のID
-  let formRating = 0;   // 入力中の評価（0＝未選択）
-  let formRoast = "";   // 入力中の焙煎度（""＝未選択）
+  let beans = [];              // すべての豆
+  let records = [];            // すべての記録
+  let draft = null;            // いま入力・編集している記録
+  let currentId = null;        // 詳細画面で表示している記録のID
+  let currentBeanId = null;    // 豆の画面で表示している豆のID
+  let editingBeanId = null;    // 編集中の豆のID（null＝新しく登録）
+  let beanFormReturn = "beans";// 豆の登録が終わったら戻る画面（"beans" / "bean" / "record"）
+  let beanFormRoast = "";      // 豆の登録画面で選んでいる焙煎度
+  let formRating = 0;          // 入力中の評価（0＝未選択）
   let formTimeInputs = [];     // 各投の時間の入力欄
   let draftFromTimer = false;  // タイマーから記録を始めたかどうか
+  let preferredBeanId = null;  // ベストレシピを読み込んだ豆（記録するとき最初に選んでおく）
+  let migrationReport = null;  // 豆ごとにまとめた結果（まとめた直後だけ入る）
+  let legacyBackupText = null; // まとめる前のデータ（文字）
+  let mergeChecked = new Set();// 「豆をまとめる」でチェックした豆のID
 
   // 画面の部品
   const $ = id => document.getElementById(id);
-  const recordList = $("recordList");
-  const beanNameInput = $("beanName");
-  const shopInput = $("shop");
+  const recordBeanSelect = $("recordBean");
   const tempInput = $("temp");
   const grindInput = $("grind");
   const brewTimeInput = $("brewTime");
@@ -1000,9 +1195,8 @@
 
   // ----- 画面の切り替え -----
   function showView(name) {
-    ["calcView", "listView", "formView", "detailView", "timerView"].forEach(view => {
-      $(view).hidden = view !== name;
-    });
+    ["calcView", "beansView", "beanView", "beanFormView", "formView", "detailView", "mergeView", "timerView"]
+      .forEach(view => { $(view).hidden = view !== name; });
     // タイマー中は押し間違いを防ぐため、上のタブを隠す
     document.querySelector(".tabs").hidden = name === "timerView";
     $("tabCalc").classList.toggle("selected", name === "calcView");
@@ -1010,67 +1204,16 @@
     window.scrollTo(0, 0);
   }
 
-  // ----- ブラウザへの保存と読み込み -----
-  function loadRecords() {
-    try {
-      const data = JSON.parse(localStorage.getItem(RECORDS_KEY));
-      records = Array.isArray(data) ? data.filter(isValidRecord).map(normalizeRecord) : [];
-    } catch (e) {
-      records = [];
-    }
-  }
-
-  function saveRecords() {
-    try {
-      localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
-      return true;
-    } catch (e) {
-      alert("記録を保存できませんでした。ブラウザの設定（プライベートモードなど）を確認してください。");
-      return false;
-    }
-  }
-
-  // 記録として正しい形かどうか調べる（復元のときに使う）
-  function isValidRecord(r) {
-    const recipe = r && r.recipe;
-    return !!r && typeof r === "object" &&
-      typeof r.id === "string" &&
-      typeof r.date === "string" && !Number.isNaN(Date.parse(r.date)) &&
-      typeof r.beanName === "string" && r.beanName !== "" &&
-      [1, 2, 3, 4, 5].includes(r.rating) &&
-      !!recipe && typeof recipe === "object" &&
-      ["beans", "water", "ratio", "bloom"].every(key => typeof recipe[key] === "number") &&
-      Array.isArray(recipe.pours) && Array.isArray(recipe.totals);
-  }
-
-  // 任意の項目が欠けていても困らないよう、形をそろえる
-  function normalizeRecord(r) {
-    const text = v => (typeof v === "string" ? v : "");
-    return {
-      id: r.id,
-      date: r.date,
-      beanName: r.beanName,
-      rating: r.rating,
-      roast: ["浅", "中", "深"].includes(r.roast) ? r.roast : "",
-      shop: text(r.shop),
-      temp: typeof r.temp === "number" ? r.temp : null,
-      grind: text(r.grind),
-      timeSec: Number.isInteger(r.timeSec) && r.timeSec >= 0 ? r.timeSec : null,
-      memo: text(r.memo),
-      // 各投の注ぎ始めの時間（秒）。蒸らしが先頭。わからない回は null
-      pourTimes: r.recipe.totals.map((_, i) => {
-        const v = Array.isArray(r.pourTimes) ? r.pourTimes[i] : null;
-        return Number.isInteger(v) && v >= 0 ? v : null;
-      }),
-      recipe: r.recipe
-    };
-  }
-
   // ----- 小さな道具 -----
 
-  // 記録ごとの番号（ID）を作る。時刻＋ランダムな文字で、重ならないようにする
+  // 記録や豆の番号（ID）を作る。時刻＋ランダムな文字で、重ならないようにする
   function newId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  // 豆の名前を整える（前後の空白を取り、全角・半角の空白や連続した空白を1つの半角空白にそろえる）
+  function normalizeName(text) {
+    return String(text).replace(/　/g, " ").replace(/\s+/g, " ").trim();
   }
 
   // 秒 → "2:30" の形の文字にする
@@ -1090,16 +1233,32 @@
     return Number(match[1]) * 60 + Number(match[2]);
   }
 
-  // 日付を "2026/9/28 07:30" の形にする
+  // 日時を "2026/9/28 07:30" の形にする
   function formatDate(iso) {
     const d = new Date(iso);
     return d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate() + " " +
       String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
   }
 
+  // 日付だけ "2026/9/28" の形にする
+  function formatDay(iso) {
+    return formatDate(iso).split(" ")[0];
+  }
+
+  // 購入日 "2026-10-01" → "2026/10/1"
+  function formatPurchaseDate(text) {
+    const [y, m, d] = text.split("-");
+    return y + "/" + Number(m) + "/" + Number(d);
+  }
+
   // 評価を "★★★☆☆" の形にする
   function starText(n) {
     return "★".repeat(n) + "☆".repeat(5 - n);
+  }
+
+  // 何回目かを名前にする（0 → "蒸らし"、1 → "1投目"…）
+  function stepName(i) {
+    return i === 0 ? "蒸らし" : i + "投目";
   }
 
   // 「項目名：内容」を1行追加する（内容が空なら何もしない）
@@ -1114,9 +1273,12 @@
     dl.append(dt, dd);
   }
 
-  // 何回目かを名前にする（0 → "蒸らし"、1 → "1投目"…）
-  function stepName(i) {
-    return i === 0 ? "蒸らし" : i + "投目";
+  // 要素を作る道具（タグ名、クラス名、文字）
+  function el(tag, className, text) {
+    const e = document.createElement(tag);
+    if (className) e.className = className;
+    if (text !== undefined) e.textContent = text;
+    return e;
   }
 
   // 計算機の値を表示する（pourTimes があれば各投の時間も並べる）
@@ -1132,6 +1294,230 @@
       return stepName(i) + "  " + format(total) + " g" + time;
     });
     addInfo(dl, "注ぎ方", lines.join("\n"));
+  }
+
+  // ----- データの形のチェック -----
+
+  function isValidRecipe(recipe) {
+    return !!recipe && typeof recipe === "object" &&
+      ["beans", "water", "ratio", "bloom"].every(key => typeof recipe[key] === "number") &&
+      Array.isArray(recipe.pours) && Array.isArray(recipe.totals);
+  }
+
+  // 記録に共通する部分が正しいか
+  function isValidRecordBase(r) {
+    return !!r && typeof r === "object" &&
+      typeof r.id === "string" &&
+      typeof r.date === "string" && !Number.isNaN(Date.parse(r.date)) &&
+      [1, 2, 3, 4, 5].includes(r.rating) &&
+      isValidRecipe(r.recipe);
+  }
+
+  // 新しい形の記録（豆のIDで豆を指す）
+  function isValidRecord(r) {
+    return isValidRecordBase(r) && typeof r.beanId === "string";
+  }
+
+  // 古い形の記録（豆の名前を文字で持っている）
+  function isLegacyRecord(r) {
+    return isValidRecordBase(r) && typeof r.beanId !== "string" &&
+      typeof r.beanName === "string" && normalizeName(r.beanName) !== "";
+  }
+
+  function isValidBean(b) {
+    return !!b && typeof b === "object" && typeof b.id === "string" &&
+      typeof b.name === "string" && normalizeName(b.name) !== "";
+  }
+
+  const textOf = v => (typeof v === "string" ? v : "");
+
+  // 豆の形をそろえる
+  function normalizeBean(b) {
+    return {
+      id: b.id,
+      name: normalizeName(b.name),
+      roast: ["浅", "中", "深"].includes(b.roast) ? b.roast : "",
+      shop: textOf(b.shop),
+      purchaseDate: /^\d{4}-\d{2}-\d{2}$/.test(b.purchaseDate) ? b.purchaseDate : "",
+      memo: textOf(b.memo),
+      finished: b.finished === true,
+      createdAt: typeof b.createdAt === "string" && !Number.isNaN(Date.parse(b.createdAt))
+        ? b.createdAt : new Date().toISOString()
+    };
+  }
+
+  // 記録の形をそろえる（beanId を渡すと、その豆に紐づける）
+  function normalizeRecord(r, beanId) {
+    return {
+      id: r.id,
+      date: r.date,
+      beanId: beanId || r.beanId,
+      rating: r.rating,
+      temp: typeof r.temp === "number" ? r.temp : null,
+      grind: textOf(r.grind),
+      timeSec: Number.isInteger(r.timeSec) && r.timeSec >= 0 ? r.timeSec : null,
+      memo: textOf(r.memo),
+      // 各投の注ぎ始めの時間（秒）。蒸らしが先頭。わからない回は null
+      pourTimes: r.recipe.totals.map((_, i) => {
+        const v = Array.isArray(r.pourTimes) ? r.pourTimes[i] : null;
+        return Number.isInteger(v) && v >= 0 ? v : null;
+      }),
+      recipe: r.recipe
+    };
+  }
+
+  // ----- ブラウザへの保存と読み込み -----
+
+  function readJson(key) {
+    try {
+      return JSON.parse(localStorage.getItem(key));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveData() {
+    try {
+      localStorage.setItem(BEANS_KEY, JSON.stringify(beans));
+      localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+      localStorage.setItem(VERSION_KEY, "2");
+      return true;
+    } catch (e) {
+      alert("保存できませんでした。ブラウザの設定（プライベートモードなど）を確認してください。");
+      return false;
+    }
+  }
+
+  // ページを開いたときに、豆と記録を読み込む
+  function loadData() {
+    const savedBeans = readJson(BEANS_KEY);
+    beans = Array.isArray(savedBeans) ? savedBeans.filter(isValidBean).map(normalizeBean) : [];
+
+    let rawText = null;
+    try { rawText = localStorage.getItem(RECORDS_KEY); } catch (e) { rawText = null; }
+    const saved = readJson(RECORDS_KEY);
+    const list = Array.isArray(saved) ? saved : [];
+
+    records = list.filter(isValidRecord).map(r => normalizeRecord(r));
+
+    // 古い形の記録があれば、豆ごとにまとめる（1回だけ）
+    const legacy = list.filter(isLegacyRecord);
+    if (legacy.length > 0) migrate(legacy, rawText);
+
+    fixOrphans();
+    try { legacyBackupText = localStorage.getItem(LEGACY_BACKUP_KEY) || legacyBackupText; } catch (e) {}
+  }
+
+  // 古い形の記録を、豆ごとにまとめた形に移す
+  function migrate(legacy, rawText) {
+    // ① 移す前に、今のデータをそのまま別の場所にコピーしておく（自動バックアップ）
+    legacyBackupText = rawText;
+    let backupOk = true;
+    try {
+      localStorage.setItem(LEGACY_BACKUP_KEY, rawText);
+    } catch (e) {
+      backupOk = false;
+    }
+
+    // ② 豆の名前ごとにまとめる
+    const result = groupLegacyRecords(legacy, beans);
+    beans = beans.concat(result.beans);
+    records = records.concat(result.records);
+    saveData();
+
+    migrationReport = {
+      beanCount: result.beans.length,
+      recordCount: result.records.length,
+      conflicts: result.conflicts,
+      backupOk: backupOk
+    };
+  }
+
+  // 古い形の記録を、豆の名前ごとにまとめる
+  //   existing：すでにある豆（同じ名前の豆があれば、そこに入れる）
+  //   戻り値：新しく作った豆、新しい形の記録、焙煎度・購入店が食い違った豆の一覧
+  function groupLegacyRecords(legacy, existing) {
+    const created = [];
+    const seen = {}; // 豆ID → 記録に出てきた焙煎度と購入店（新しい順）
+
+    // 新しい順に見ていく。最初に出てきた値＝一番新しい記録の値
+    const sorted = [...legacy].sort((a, b) => b.date.localeCompare(a.date));
+    const converted = sorted.map(r => {
+      const name = normalizeName(r.beanName);
+      let bean = existing.concat(created).find(b => b.name === name);
+      if (!bean) {
+        bean = { id: newId(), name: name, roast: "", shop: "", purchaseDate: "", memo: "", finished: false, createdAt: r.date };
+        created.push(bean);
+        seen[bean.id] = { roast: [], shop: [] };
+      }
+
+      // 今回新しく作った豆だけ、焙煎度と購入店を記録から決める
+      const s = seen[bean.id];
+      if (s) {
+        const roast = ["浅", "中", "深"].includes(r.roast) ? r.roast : "";
+        const shop = textOf(r.shop).trim();
+        if (roast && !s.roast.includes(roast)) s.roast.push(roast);
+        if (shop && !s.shop.includes(shop)) s.shop.push(shop);
+        if (!bean.roast) bean.roast = roast; // 空でない値のうち一番新しいもの
+        if (!bean.shop) bean.shop = shop;
+        if (r.date < bean.createdAt) bean.createdAt = r.date; // 一番古い記録の日を登録日に
+      }
+      return normalizeRecord(r, bean.id);
+    });
+
+    // 焙煎度・購入店が記録によって違っていた豆を集める
+    const conflicts = {};
+    created.forEach(bean => {
+      const s = seen[bean.id];
+      const notes = [];
+      if (s.roast.length > 1) notes.push("焙煎度が記録によって違いました（新しい順：" + s.roast.join("・") + "）→「" + bean.roast + "」にしました");
+      if (s.shop.length > 1) notes.push("購入店が記録によって違いました（新しい順：" + s.shop.join("・") + "）→「" + bean.shop + "」にしました");
+      if (notes.length) conflicts[bean.id] = notes;
+    });
+
+    return { beans: created, records: converted, conflicts: conflicts };
+  }
+
+  // 豆が見つからない記録（データが壊れていた場合など）は「名前のない豆」に入れる
+  function fixOrphans() {
+    const orphans = records.filter(r => !findBean(r.beanId));
+    if (orphans.length === 0) return;
+    let bean = beans.find(b => b.name === "名前のない豆");
+    if (!bean) {
+      bean = normalizeBean({ id: newId(), name: "名前のない豆" });
+      beans.push(bean);
+    }
+    orphans.forEach(r => { r.beanId = bean.id; });
+    saveData();
+  }
+
+  // ----- 豆と記録を探す道具 -----
+
+  function findBean(id) {
+    return beans.find(b => b.id === id);
+  }
+
+  // その豆の記録（新しい順）
+  function recordsOf(beanId) {
+    return records.filter(r => r.beanId === beanId).sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  // 評価が一番高い記録（同じ評価なら新しい方）
+  function bestRecord(beanId) {
+    return records.filter(r => r.beanId === beanId)
+      .sort((a, b) => b.rating - a.rating || b.date.localeCompare(a.date))[0] || null;
+  }
+
+  // 最後に使った日（記録がなければ登録した日）
+  function lastUsed(bean) {
+    const list = recordsOf(bean.id);
+    return list.length ? list[0].date : bean.createdAt;
+  }
+
+  // 豆の並び：最後に記録した日が新しい順
+  function sortedBeans(includeFinished) {
+    return beans.filter(b => includeFinished || !b.finished)
+      .sort((a, b) => lastUsed(b).localeCompare(lastUsed(a)));
   }
 
   // ----- 計算機 →「この内容で記録」 -----
@@ -1171,15 +1557,21 @@
     return recipe;
   }
 
+  // 新しい記録で最初に選んでおく豆（ベストレシピを読み込んだ豆 → 最後に記録した豆）
+  function defaultBeanId() {
+    if (preferredBeanId && findBean(preferredBeanId)) return preferredBeanId;
+    const latest = [...records].sort((a, b) => b.date.localeCompare(a.date))[0];
+    const bean = latest && findBean(latest.beanId);
+    return bean && !bean.finished ? bean.id : "";
+  }
+
   // 新しい記録を作って、入力画面を開く
   function openNewRecord(recipe, timeSec, pourTimes) {
     openForm({
       id: newId(),
       date: new Date().toISOString(),
-      beanName: "",
+      beanId: defaultBeanId(),
       rating: 0,
-      roast: "",
-      shop: "",
       temp: null,
       grind: "",
       timeSec: timeSec,
@@ -1196,7 +1588,7 @@
     openNewRecord(recipe, null, recipe.totals.map(() => null));
   });
 
-  // ----- 入力・編集画面 -----
+  // ----- 記録の入力・編集画面 -----
 
   function setRating(n) {
     formRating = n;
@@ -1205,11 +1597,19 @@
     });
   }
 
-  function setRoast(value) {
-    formRoast = value;
-    $("roastButtons").querySelectorAll("button").forEach(b => {
-      b.classList.toggle("selected", b.dataset.roast === value);
-    });
+  // 豆の選択肢を作る（飲み終わった豆は下にまとめる）
+  function fillBeanSelect(selectedId) {
+    recordBeanSelect.innerHTML = "";
+    recordBeanSelect.appendChild(new Option("豆を選んでください", ""));
+    sortedBeans(false).forEach(b => recordBeanSelect.appendChild(new Option(b.name, b.id)));
+    const finished = sortedBeans(true).filter(b => b.finished);
+    if (finished.length) {
+      const group = document.createElement("optgroup");
+      group.label = "飲み終わった豆";
+      finished.forEach(b => group.appendChild(new Option(b.name, b.id)));
+      recordBeanSelect.appendChild(group);
+    }
+    recordBeanSelect.value = findBean(selectedId) ? selectedId : "";
   }
 
   // 入力画面を開く（record の内容を入力欄に入れる）
@@ -1219,10 +1619,8 @@
     $("formTitle").textContent = isEdit ? "記録を編集" : "記録する";
     showRecipe($("formRecipe"), record.recipe);
 
-    beanNameInput.value = record.beanName;
+    fillBeanSelect(record.beanId);
     setRating(record.rating);
-    setRoast(record.roast);
-    shopInput.value = record.shop;
     tempInput.value = record.temp !== null ? record.temp : "";
     grindInput.value = record.grind;
     brewTimeInput.value = record.timeSec !== null ? secToText(record.timeSec) : "";
@@ -1232,34 +1630,18 @@
     const timesList = $("formTimes");
     timesList.innerHTML = "";
     formTimeInputs = record.recipe.totals.map((total, i) => {
-      const li = document.createElement("li");
-      const name = document.createElement("span");
-      name.className = "name";
-      name.textContent = stepName(i);
-      const grams = document.createElement("span");
-      grams.textContent = format(total) + " g";
-      const input = document.createElement("input");
+      const li = el("li");
+      const input = el("input", "time-input");
       input.type = "text";
-      input.className = "time-input";
       input.inputMode = "numeric";
       input.placeholder = "0:00";
       input.value = record.pourTimes[i] !== null ? secToText(record.pourTimes[i]) : "";
-      li.append(name, grams, input);
+      li.append(el("span", "name", stepName(i)), el("span", "", format(total) + " g"), input);
       timesList.appendChild(li);
       return input;
     });
 
-    ["beanNameError", "ratingError", "brewTimeError", "pourTimesError"].forEach(id => $(id).hidden = true);
-
-    // 過去に入れた豆の名前を候補にする（重なりは1つにまとめる）
-    const names = [...new Set(records.map(r => r.beanName))];
-    $("beanNames").innerHTML = "";
-    names.forEach(name => {
-      const option = document.createElement("option");
-      option.value = name;
-      $("beanNames").appendChild(option);
-    });
-
+    ["recordBeanError", "ratingError", "brewTimeError", "pourTimesError"].forEach(id => $(id).hidden = true);
     showView("formView");
   }
 
@@ -1269,35 +1651,34 @@
     if (button) setRating(Number(button.dataset.star));
   });
 
-  // 焙煎度を押したとき（同じものをもう一度押すと外れる）
-  $("roastButtons").addEventListener("click", e => {
-    const button = e.target.closest("button");
-    if (!button) return;
-    setRoast(formRoast === button.dataset.roast ? "" : button.dataset.roast);
+  // 「＋ 新しい豆を登録」：豆を登録したら、この記録画面に戻ってくる
+  $("newBeanFromForm").addEventListener("click", () => openBeanForm(null, "record"));
+
+  recordBeanSelect.addEventListener("change", () => {
+    $("recordBeanError").hidden = recordBeanSelect.value !== "";
   });
 
   // 保存ボタン
   $("saveButton").addEventListener("click", () => {
-    const beanName = beanNameInput.value.trim();
+    const beanId = recordBeanSelect.value;
     const timeSec = textToSec(brewTimeInput.value);
     const pourTimes = formTimeInputs.map(input => textToSec(input.value));
     const pourTimesOk = !pourTimes.some(Number.isNaN);
 
     // 入力のチェック（おかしいところは赤字で知らせる）
-    $("beanNameError").hidden = beanName !== "";
+    const beanOk = !!findBean(beanId);
+    $("recordBeanError").hidden = beanOk;
     $("ratingError").hidden = formRating > 0;
     $("brewTimeError").hidden = !Number.isNaN(timeSec);
     $("pourTimesError").hidden = pourTimesOk;
-    if (beanName === "" || formRating === 0 || Number.isNaN(timeSec) || !pourTimesOk) return;
+    if (!beanOk || formRating === 0 || Number.isNaN(timeSec) || !pourTimesOk) return;
 
     const temp = parseFloat(tempInput.value);
     const record = {
       id: draft.id,
       date: draft.date,
-      beanName: beanName,
+      beanId: beanId,
       rating: formRating,
-      roast: formRoast,
-      shop: shopInput.value.trim(),
       temp: Number.isNaN(temp) ? null : temp,
       grind: grindInput.value.trim(),
       timeSec: timeSec,
@@ -1311,14 +1692,14 @@
     const isEdit = index >= 0;
     if (isEdit) records[index] = record;
     else records.push(record);
-    if (!saveRecords()) return;
+    if (!saveData()) return;
 
     if (isEdit) {
-      openDetail(record.id); // 編集のあとは詳細画面へ
+      openDetail(record.id);       // 編集のあとは詳細画面へ
     } else {
       if (draftFromTimer) resetTimer(); // タイマーの結果は記録したので片付ける
-      renderList();          // 新しい記録のあとは一覧へ
-      showView("listView");
+      preferredBeanId = null;
+      openBean(beanId);            // 新しい記録のあとは、その豆の画面へ
     }
   });
 
@@ -1329,63 +1710,283 @@
     else showView("calcView");
   });
 
-  // ----- 一覧画面 -----
+  // ----- 豆の一覧（記録タブのトップ） -----
 
-  function renderList() {
-    recordList.innerHTML = "";
-    $("emptyMessage").hidden = records.length > 0;
+  function renderBeans() {
+    const showFinished = $("showFinished").checked;
+    const list = $("beanList");
+    list.innerHTML = "";
+    $("beansEmpty").hidden = beans.length > 0;
 
-    // 新しい順に並べる
-    const sorted = [...records].sort((a, b) => b.date.localeCompare(a.date));
+    const finishedCount = beans.filter(b => b.finished).length;
+    $("finishedRow").hidden = finishedCount === 0;
+    $("finishedCount").textContent = "（" + finishedCount + "）";
+    $("openMergeButton").hidden = beans.length < 2;
+    $("legacyBackupButton").hidden = !legacyBackupText;
 
-    sorted.forEach(r => {
-      const li = document.createElement("li");
-      const button = document.createElement("button");
+    sortedBeans(showFinished).forEach(bean => {
+      const beanRecords = recordsOf(bean.id);
+      const best = beanRecords.reduce((max, r) => Math.max(max, r.rating), 0);
+
+      const li = el("li", bean.finished ? "finished" : "");
+      const button = el("button");
       button.type = "button";
 
-      const top = document.createElement("div");
-      top.className = "top";
-      const date = document.createElement("span");
-      date.textContent = formatDate(r.date);
-      const stars = document.createElement("span");
-      stars.className = "star-text";
-      stars.textContent = starText(r.rating);
-      top.append(date, stars);
+      const top = el("div", "top");
+      top.append(
+        el("span", "", beanRecords.length ? "最終 " + formatDay(beanRecords[0].date) : "記録なし"),
+        el("span", "star-text", best ? "最高 " + starText(best) : "")
+      );
 
-      const bean = document.createElement("div");
-      bean.className = "bean";
-      bean.textContent = r.beanName;
+      const name = el("div", "bean", bean.name);
+      if (bean.finished) name.appendChild(el("span", "tag", "飲み終わった"));
 
-      const sub = document.createElement("div");
-      sub.className = "sub";
       const parts = [];
-      if (r.roast) parts.push(r.roast + "煎り");
-      parts.push("豆" + format(r.recipe.beans) + "g");
-      parts.push("湯" + format(r.recipe.water) + "ml");
-      parts.push("1:" + format(r.recipe.ratio));
-      sub.textContent = parts.join("・");
+      if (bean.roast) parts.push(bean.roast + "煎り");
+      if (bean.shop) parts.push(bean.shop);
+      parts.push("記録 " + beanRecords.length + "件");
 
-      button.append(top, bean, sub);
-      button.addEventListener("click", () => openDetail(r.id)); // タップで詳細へ
+      button.append(top, name, el("div", "sub", parts.join("・")));
+      button.addEventListener("click", () => openBean(bean.id)); // タップで豆の画面へ
       li.appendChild(button);
-      recordList.appendChild(li);
+      list.appendChild(li);
     });
   }
 
-  // ----- 詳細画面 -----
+  $("showFinished").addEventListener("change", renderBeans);
+  $("addBeanButton").addEventListener("click", () => openBeanForm(null, "beans"));
+  $("openMergeButton").addEventListener("click", () => openMerge([]));
+
+  // ----- 豆の画面 -----
+
+  // 記録の一覧を作る（豆の画面で使う）
+  function renderRecordItems(ul, list) {
+    ul.innerHTML = "";
+    list.forEach(r => {
+      const li = el("li");
+      const button = el("button");
+      button.type = "button";
+
+      const top = el("div", "top");
+      top.append(el("span", "", formatDate(r.date)), el("span", "star-text", starText(r.rating)));
+
+      const main = el("div", "bean",
+        "豆" + format(r.recipe.beans) + "g・湯" + format(r.recipe.water) + "ml・1:" + format(r.recipe.ratio));
+
+      const parts = [];
+      if (r.timeSec !== null) parts.push("抽出 " + secToText(r.timeSec));
+      if (r.temp !== null) parts.push(r.temp + "℃");
+      if (r.grind) parts.push(r.grind);
+      if (r.memo) parts.push(r.memo.split("\n")[0].slice(0, 30));
+
+      button.append(top, main, el("div", "sub", parts.join("・")));
+      button.addEventListener("click", () => openDetail(r.id)); // タップで記録の詳細へ
+      li.appendChild(button);
+      ul.appendChild(li);
+    });
+  }
+
+  function openBean(id) {
+    const bean = findBean(id);
+    if (!bean) {
+      renderBeans();
+      showView("beansView");
+      return;
+    }
+    currentBeanId = id;
+
+    $("beanTitle").textContent = bean.name;
+    $("beanFinishedTag").hidden = !bean.finished;
+
+    const info = $("beanInfo");
+    info.innerHTML = "";
+    addInfo(info, "焙煎度", bean.roast ? bean.roast + "煎り" : "");
+    addInfo(info, "購入店", bean.shop);
+    addInfo(info, "購入日", bean.purchaseDate ? formatPurchaseDate(bean.purchaseDate) : "");
+    addInfo(info, "メモ", bean.memo);
+    if (!info.children.length) addInfo(info, "情報", "まだありません（「編集」から入れられます）");
+
+    const list = recordsOf(id);
+    const best = bestRecord(id);
+    $("bestRecipeButton").disabled = !best;
+    $("bestRecipeNote").textContent = best
+      ? "評価が一番高い記録：" + starText(best.rating) + "（" + formatDate(best.date) + "）"
+      : "記録がまだないので、ベストレシピはありません。";
+
+    $("finishBeanButton").textContent = bean.finished ? "まだ飲んでいる" : "飲み終わった";
+    $("mergeBeanButton").disabled = beans.length < 2;
+    $("deleteBeanButton").disabled = list.length > 0;
+    $("deleteBeanNote").hidden = list.length === 0;
+
+    $("beanRecordCount").textContent = list.length;
+    renderRecordItems($("beanRecordList"), list);
+    $("beanRecordsEmpty").hidden = list.length > 0;
+
+    showView("beanView");
+  }
+
+  // ベストレシピを計算機に読み込む
+  function loadRecipeToCalc(record, bean) {
+    const r = record.recipe;
+
+    // 比率：1:15／16／17 ならそのボタン、それ以外は「自由」に入れる
+    if ([15, 16, 17].includes(r.ratio)) {
+      applyRatioChoice(String(r.ratio));
+    } else {
+      customInput.value = format(r.ratio);
+      applyRatioChoice("custom");
+    }
+
+    // 注ぐ回数
+    const count = r.pours.length;
+    if ([2, 3, 4].includes(count)) {
+      const group = $("pourButtons");
+      selectButton(group, group.querySelector('[data-pours="' + count + '"]'));
+      setPours(count);
+      // 各回の量（最後の1投は自動計算なので入れない）
+      pourManual = r.pours.slice(0, -1);
+    }
+    bloomManual = r.bloom;
+
+    // 豆とお湯の量
+    beansInput.value = format(r.beans);
+    waterInput.value = format(r.water);
+    lastInput = "beans";
+    showSteps();
+    save();
+
+    preferredBeanId = bean.id; // 記録するとき、この豆を最初に選んでおく
+    $("recordError").hidden = true;
+    const note = $("loadedNote");
+    note.textContent = "「" + bean.name + "」のベストレシピ（" + starText(record.rating) + "・" +
+      formatDay(record.date) + "）を読み込みました。";
+    note.hidden = false;
+    showView("calcView");
+  }
+
+  $("bestRecipeButton").addEventListener("click", () => {
+    const bean = findBean(currentBeanId);
+    const best = bestRecord(currentBeanId);
+    if (bean && best) loadRecipeToCalc(best, bean);
+  });
+
+  $("editBeanButton").addEventListener("click", () => openBeanForm(currentBeanId, "bean"));
+
+  // 飲み終わった ⇔ まだ飲んでいる
+  $("finishBeanButton").addEventListener("click", () => {
+    const bean = findBean(currentBeanId);
+    if (!bean) return;
+    bean.finished = !bean.finished;
+    saveData();
+    openBean(bean.id);
+  });
+
+  $("mergeBeanButton").addEventListener("click", () => openMerge([currentBeanId]));
+
+  $("deleteBeanButton").addEventListener("click", () => {
+    const bean = findBean(currentBeanId);
+    if (!bean || recordsOf(bean.id).length > 0) return;
+    if (!confirm("豆「" + bean.name + "」を削除しますか？")) return;
+    beans = beans.filter(b => b.id !== bean.id);
+    saveData();
+    renderBeans();
+    showView("beansView");
+  });
+
+  $("beanBackButton").addEventListener("click", () => {
+    renderBeans();
+    showView("beansView");
+  });
+
+  // ----- 豆の登録・編集画面 -----
+
+  function setBeanRoast(value) {
+    beanFormRoast = value;
+    $("beanRoastButtons").querySelectorAll("button").forEach(b => {
+      b.classList.toggle("selected", b.dataset.roast === value);
+    });
+  }
+
+  // id：編集する豆（null なら新しく登録）、returnTo：終わったら戻る画面
+  function openBeanForm(id, returnTo) {
+    editingBeanId = id;
+    beanFormReturn = returnTo;
+    const bean = id ? findBean(id) : null;
+    $("beanFormTitle").textContent = bean ? "豆を編集" : "豆を登録";
+    $("beanFormName").value = bean ? bean.name : "";
+    setBeanRoast(bean ? bean.roast : "");
+    $("beanShop").value = bean ? bean.shop : "";
+    $("beanPurchaseDate").value = bean ? bean.purchaseDate : "";
+    $("beanMemo").value = bean ? bean.memo : "";
+    $("beanFormNameError").hidden = true;
+    showView("beanFormView");
+  }
+
+  // 焙煎度を押したとき（同じものをもう一度押すと外れる）
+  $("beanRoastButtons").addEventListener("click", e => {
+    const button = e.target.closest("button");
+    if (!button) return;
+    setBeanRoast(beanFormRoast === button.dataset.roast ? "" : button.dataset.roast);
+  });
+
+  $("beanFormSave").addEventListener("click", () => {
+    const name = normalizeName($("beanFormName").value);
+    const error = $("beanFormNameError");
+    if (name === "") {
+      error.textContent = "豆の名前を入れてください。";
+      error.hidden = false;
+      return;
+    }
+    if (beans.some(b => b.id !== editingBeanId && b.name === name)) {
+      error.textContent = "同じ名前の豆がすでにあります。";
+      error.hidden = false;
+      return;
+    }
+
+    let bean = findBean(editingBeanId);
+    if (!bean) {
+      bean = normalizeBean({ id: newId(), name: name, createdAt: new Date().toISOString() });
+      beans.push(bean);
+    }
+    bean.name = name;
+    bean.roast = beanFormRoast;
+    bean.shop = $("beanShop").value.trim();
+    bean.purchaseDate = $("beanPurchaseDate").value;
+    bean.memo = $("beanMemo").value.trim();
+    if (!saveData()) return;
+
+    if (beanFormReturn === "record") {
+      // 記録画面に戻り、登録した豆を選んでおく（入力中の内容はそのまま）
+      fillBeanSelect(bean.id);
+      $("recordBeanError").hidden = true;
+      showView("formView");
+    } else {
+      openBean(bean.id);
+    }
+  });
+
+  $("beanFormCancel").addEventListener("click", () => {
+    if (beanFormReturn === "record") showView("formView");
+    else if (beanFormReturn === "bean") openBean(editingBeanId);
+    else {
+      renderBeans();
+      showView("beansView");
+    }
+  });
+
+  // ----- 記録の詳細画面 -----
 
   function openDetail(id) {
     const r = records.find(record => record.id === id);
     if (!r) return;
     currentId = id;
+    const bean = findBean(r.beanId);
 
-    $("detailTitle").textContent = r.beanName;
+    $("detailTitle").textContent = bean.name;
     const info = $("detailInfo");
     info.innerHTML = "";
     addInfo(info, "日付", formatDate(r.date));
     addInfo(info, "評価", starText(r.rating), "star-text");
-    addInfo(info, "焙煎度", r.roast ? r.roast + "煎り" : "");
-    addInfo(info, "購入店", r.shop);
     addInfo(info, "湯温", r.temp !== null ? r.temp + " ℃" : "");
     addInfo(info, "挽き目", r.grind);
     addInfo(info, "抽出時間", r.timeSec !== null ? secToText(r.timeSec) : "");
@@ -1403,45 +2004,174 @@
   $("deleteButton").addEventListener("click", () => {
     const r = records.find(record => record.id === currentId);
     if (!r) return;
-    if (!confirm("「" + r.beanName + "」（" + formatDate(r.date) + "）の記録を削除しますか？\n元に戻せません。")) return;
+    if (!confirm("この記録（" + formatDate(r.date) + "）を削除しますか？\n元に戻せません。")) return;
     records = records.filter(record => record.id !== currentId);
-    saveRecords();
-    renderList();
-    showView("listView");
+    saveData();
+    openBean(r.beanId);
   });
 
-  $("backButton").addEventListener("click", () => showView("listView"));
+  $("backButton").addEventListener("click", () => {
+    const r = records.find(record => record.id === currentId);
+    if (r) openBean(r.beanId);
+  });
+
+  // ----- 豆をまとめる（移行の結果・表記ゆれの統合） -----
+
+  function openMerge(preChecked) {
+    mergeChecked = new Set(preChecked);
+    $("mergeMessage").textContent = "";
+
+    // 移行した直後なら、その結果を表示する
+    const card = $("migrationCard");
+    card.hidden = !migrationReport;
+    if (migrationReport) {
+      const conflictCount = Object.keys(migrationReport.conflicts).length;
+      $("migrationText").textContent =
+        "記録 " + migrationReport.recordCount + "件を、豆 " + migrationReport.beanCount + "種類にまとめました。" +
+        (conflictCount
+          ? "焙煎度や購入店が記録によって違っていた豆が " + conflictCount + "つあります（下の一覧に赤字で表示）。一番新しい記録の値にしています。"
+          : "");
+      $("migrationBackupText").textContent = migrationReport.backupOk
+        ? "まとめる前のデータは、このブラウザの中に自動でバックアップしました。念のためファイルにも保存できます。"
+        : "自動バックアップに失敗しました。下のボタンで、まとめる前のデータをファイルに保存してください。";
+    }
+
+    renderMerge();
+    showView("mergeView");
+  }
+
+  function renderMerge() {
+    const list = $("mergeList");
+    list.innerHTML = "";
+    // 名前の順に並べる（似た名前が近くに来る）
+    [...beans].sort((a, b) => a.name.localeCompare(b.name, "ja")).forEach(bean => {
+      const li = el("li");
+      const label = el("label");
+      const box = el("input");
+      box.type = "checkbox";
+      box.checked = mergeChecked.has(bean.id);
+      box.addEventListener("change", () => {
+        if (box.checked) mergeChecked.add(bean.id);
+        else mergeChecked.delete(bean.id);
+        updateMergeControls();
+      });
+
+      const text = el("div");
+      const name = el("span", "merge-name", bean.name);
+      if (bean.finished) name.appendChild(el("span", "tag", "飲み終わった"));
+      text.append(name, el("span", "count", "（記録 " + recordsOf(bean.id).length + "件）"));
+      // 移行のとき焙煎度・購入店が食い違っていた豆は、赤字で知らせる
+      const notes = migrationReport && migrationReport.conflicts[bean.id];
+      if (notes) notes.forEach(n => text.appendChild(el("span", "conflict", n)));
+
+      label.append(box, text);
+      li.appendChild(label);
+      list.appendChild(li);
+    });
+    updateMergeControls();
+  }
+
+  // チェックした豆に合わせて「残す豆」の選択肢とボタンを変える
+  function updateMergeControls() {
+    const checked = beans.filter(b => mergeChecked.has(b.id));
+    const select = $("mergeTarget");
+    const before = select.value;
+    select.innerHTML = "";
+    // 記録が多い豆を先に（そのまま残すことが多いので）
+    checked.sort((a, b) => recordsOf(b.id).length - recordsOf(a.id).length)
+      .forEach(b => select.appendChild(new Option(b.name, b.id)));
+    if (checked.some(b => b.id === before)) select.value = before;
+
+    const ready = checked.length >= 2;
+    select.disabled = !ready;
+    $("mergeButton").disabled = !ready;
+    if (!ready) select.appendChild(new Option("まとめたい豆を2つ以上チェックしてください", ""));
+    if (!ready) select.value = "";
+  }
+
+  // sources の豆を target にまとめる（記録は target に移し、空いている情報は引き継ぐ）
+  function mergeBeans(target, sources) {
+    sources.forEach(s => {
+      records.forEach(r => { if (r.beanId === s.id) r.beanId = target.id; });
+      ["roast", "shop", "purchaseDate"].forEach(key => {
+        if (!target[key] && s[key]) target[key] = s[key];
+      });
+      // メモは両方あればつなげる
+      if (s.memo && s.memo !== target.memo) target.memo = target.memo ? target.memo + "\n" + s.memo : s.memo;
+      if (s.createdAt < target.createdAt) target.createdAt = s.createdAt;
+      if (migrationReport) delete migrationReport.conflicts[s.id];
+    });
+    // まとめた豆のうち1つでも「まだ飲んでいる」なら、まだ飲んでいる扱いにする
+    target.finished = [target, ...sources].every(b => b.finished);
+    const ids = sources.map(s => s.id);
+    beans = beans.filter(b => !ids.includes(b.id));
+  }
+
+  $("mergeButton").addEventListener("click", () => {
+    const target = findBean($("mergeTarget").value);
+    const sources = beans.filter(b => mergeChecked.has(b.id) && b !== target);
+    if (!target || sources.length === 0) return;
+    const names = sources.map(s => "「" + s.name + "」").join("");
+    if (!confirm(names + " を「" + target.name + "」にまとめます。\nよろしいですか？")) return;
+
+    mergeBeans(target, sources);
+    if (!saveData()) return;
+    mergeChecked = new Set();
+    $("mergeMessage").textContent = names + " を「" + target.name + "」にまとめました。";
+    renderMerge();
+  });
+
+  $("mergeDone").addEventListener("click", () => {
+    migrationReport = null; // 移行の結果の表示はここで終わり
+    renderBeans();
+    showView("beansView");
+  });
 
   // ----- タブ -----
   $("tabCalc").addEventListener("click", () => showView("calcView"));
   $("tabRecords").addEventListener("click", () => {
-    renderList();
-    showView("listView");
+    renderBeans();
+    showView("beansView");
   });
 
   // ----- バックアップ（ファイルに書き出す） -----
-  $("backupButton").addEventListener("click", () => {
-    const data = {
-      app: "coffee-app",
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      records: records
-    };
+
+  // 文字をファイルにしてダウンロードさせる
+  function downloadText(text, baseName) {
     const today = new Date();
-    const fileName = "coffee-backup-" + today.getFullYear() +
+    const fileName = baseName + "-" + today.getFullYear() +
       String(today.getMonth() + 1).padStart(2, "0") +
       String(today.getDate()).padStart(2, "0") + ".json";
-
-    // 記録を文字にしてファイルを作り、ダウンロードさせる
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const blob = new Blob([text], { type: "application/json" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = fileName;
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    return fileName;
+  }
 
-    $("backupMessage").textContent = records.length + "件の記録を「" + fileName + "」に書き出しました。";
+  $("backupButton").addEventListener("click", () => {
+    const data = {
+      app: "coffee-app",
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      beans: beans,
+      records: records
+    };
+    const fileName = downloadText(JSON.stringify(data, null, 2), "coffee-backup");
+    $("backupMessage").textContent =
+      "豆 " + beans.length + "件・記録 " + records.length + "件を「" + fileName + "」に書き出しました。";
   });
+
+  // 豆ごとにまとめる前のデータをファイルに保存する
+  function downloadLegacy(messageId) {
+    if (!legacyBackupText) return;
+    const fileName = downloadText(legacyBackupText, "coffee-backup-before-beans");
+    $(messageId).textContent = "まとめる前のデータを「" + fileName + "」に保存しました。";
+  }
+  $("migrationBackupButton").addEventListener("click", () => downloadLegacy("migrationBackupText"));
+  $("legacyBackupButton").addEventListener("click", () => downloadLegacy("backupMessage"));
 
   // ----- 復元（ファイルから読み込む） -----
   $("restoreButton").addEventListener("click", () => $("restoreFile").click());
@@ -1453,15 +2183,32 @@
 
     file.text().then(text => {
       const data = JSON.parse(text);
+      // 古いバックアップ（記録だけの並び）と、新しいバックアップ（豆＋記録）の両方に対応
       const list = Array.isArray(data) ? data : data.records;
+      const inBeans = !Array.isArray(data) && Array.isArray(data.beans)
+        ? data.beans.filter(isValidBean).map(normalizeBean) : [];
       if (!Array.isArray(list)) throw new Error("形が違う");
 
-      const valid = list.filter(isValidRecord).map(normalizeRecord);
-      if (valid.length === 0) throw new Error("記録がない");
+      // 豆：同じIDは上書き、なければ追加
+      inBeans.forEach(b => {
+        const index = beans.findIndex(x => x.id === b.id);
+        if (index >= 0) beans[index] = b;
+        else beans.push(b);
+      });
+
+      // 記録：新しい形はそのまま、古い形は豆の名前でまとめてから
+      let incoming = list.filter(isValidRecord).filter(r => findBean(r.beanId)).map(r => normalizeRecord(r));
+      const legacy = list.filter(isLegacyRecord);
+      if (legacy.length) {
+        const grouped = groupLegacyRecords(legacy, beans);
+        beans = beans.concat(grouped.beans);
+        incoming = incoming.concat(grouped.records);
+      }
+      if (incoming.length === 0 && inBeans.length === 0) throw new Error("中身がない");
 
       // 同じIDの記録はファイルの内容で上書き、ないものは追加する
       let added = 0;
-      valid.forEach(r => {
+      incoming.forEach(r => {
         const index = records.findIndex(x => x.id === r.id);
         if (index >= 0) {
           records[index] = r;
@@ -1470,10 +2217,11 @@
           added++;
         }
       });
-      if (!saveRecords()) return;
-      renderList();
+      if (!saveData()) return;
+      renderBeans();
       $("backupMessage").textContent =
-        valid.length + "件を読み込みました（新しく追加 " + added + "件、上書き " + (valid.length - added) + "件）。";
+        "豆 " + inBeans.length + "件・記録 " + incoming.length + "件を読み込みました（記録の新規 " + added +
+        "件、上書き " + (incoming.length - added) + "件）。";
     }).catch(() => {
       $("backupMessage").textContent = "このファイルは読み込めませんでした。バックアップで書き出したファイルを選んでください。";
     });
@@ -1706,7 +2454,9 @@
   load();
   setPours(pours);
   showSteps();
-  loadRecords();
+  loadData();
+  // 豆ごとにまとめた直後なら、その結果の画面を開く
+  if (migrationReport) openMerge([]);
 </script>
 </body>
 </html>
