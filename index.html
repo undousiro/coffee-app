@@ -465,6 +465,68 @@
       border-radius: 12px;
     }
 
+    /* ===== 味チャート ===== */
+    /* 入力：1項目ずつ */
+    .taste-field { margin-top: 18px; }
+    .taste-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .taste-name { font-size: 18px; font-weight: bold; color: var(--text); }
+    .taste-value { font-size: 16px; font-weight: bold; color: var(--main); }
+    .taste-help { margin: 2px 0 8px; font-size: 14px; color: var(--sub); }
+    .scale {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+    }
+    .scale button {
+      min-height: 48px;
+      font-size: 18px;
+      font-weight: bold;
+      border: 2px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--sub);
+      cursor: pointer;
+    }
+    .scale button.selected {
+      border-color: var(--main);
+      background: var(--main);
+      color: #fff;
+    }
+    .scale-ends {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 2px;
+      font-size: 12px;
+      color: var(--sub);
+    }
+
+    /* 表示：5角形のレーダーチャート */
+    .chart svg {
+      display: block;
+      width: 100%;
+      max-width: 340px;
+      height: auto;
+      margin: 0 auto;
+    }
+    .chart .grid { fill: none; stroke: var(--line); stroke-width: 1; }
+    .chart .axis { stroke: var(--line); stroke-width: 1; }
+    .chart .shape {
+      fill: var(--main);
+      fill-opacity: 0.22;
+      stroke: var(--main);
+      stroke-width: 2;
+      stroke-linejoin: round;
+    }
+    .chart .point { fill: var(--main); stroke: var(--card); stroke-width: 2; }
+    .chart .label { font-size: 15px; font-weight: bold; fill: var(--text); }
+    .chart .value { font-size: 15px; fill: var(--sub); }
+    .chart .value.none { fill: var(--line); }
+    .chart .tick { font-size: 10px; fill: var(--sub); }
+
     /* ボタンを素早く押しても画面が拡大されないようにする */
     button { touch-action: manipulation; }
 
@@ -694,6 +756,12 @@
       <p class="note" id="deleteBeanNote" hidden>記録が残っている豆は削除できません。別の豆と統合するか、先に記録を削除してください。</p>
     </section>
 
+    <section class="card">
+      <h2>この豆の味（平均）</h2>
+      <div class="chart" id="beanChart"></div>
+      <p class="note" id="beanChartNote"></p>
+    </section>
+
     <h2 class="section-title">この豆の記録（<span id="beanRecordCount"></span>件）</h2>
     <ul class="record-list" id="beanRecordList"></ul>
     <p class="empty" id="beanRecordsEmpty">まだ記録がありません。<br>計算機の「この内容で記録」から追加できます。</p>
@@ -778,6 +846,16 @@
         </div>
         <p class="error" id="ratingError" hidden>★を選んでください。</p>
       </div>
+    </section>
+
+    <section class="card">
+      <h2>味チャート（強さ）</h2>
+      <p class="note">好き嫌いではなく「どれくらい強く感じたか」です。1＝弱い、5＝強い。付けたい項目だけでOK。同じ数字をもう一度押すと消せます。</p>
+      <!-- 5項目の入力欄。中身は JavaScript で作る -->
+      <div id="tasteInputs"></div>
+    </section>
+
+    <section class="card">
 
       <div class="field">
         <label for="temp">湯温</label>
@@ -816,6 +894,11 @@
     <section class="card">
       <h2>記録</h2>
       <dl class="info" id="detailInfo"></dl>
+    </section>
+    <section class="card">
+      <h2>味チャート（強さ）</h2>
+      <div class="chart" id="detailChart"></div>
+      <p class="note" id="detailChartNote"></p>
     </section>
     <section class="card">
       <h2>計算機の値</h2>
@@ -1296,6 +1379,105 @@
     addInfo(dl, "注ぎ方", lines.join("\n"));
   }
 
+  // ----- 味チャート -----
+
+  // 5つの項目（並び順がそのままチャートの時計回りの順になる）
+  const TASTES = [
+    { key: "acidity",    name: "酸味", help: "レモンや果物のような、すっぱさ・明るさ" },
+    { key: "aroma",      name: "香り", help: "鼻に抜ける香りの強さ（淹れているとき・飲んだとき）" },
+    { key: "sweetness",  name: "甘み", help: "砂糖やはちみつのような、まろやかな甘さ" },
+    { key: "bitterness", name: "苦み", help: "焦がしたような、舌に残るほろ苦さ" },
+    { key: "body",       name: "コク", help: "口に含んだときの重さ・濃さ" }
+  ];
+
+  // 味の評価の形をそろえる（1〜5の整数が付いている項目だけ残す）
+  function normalizeTaste(taste) {
+    const result = {};
+    if (taste && typeof taste === "object") {
+      TASTES.forEach(t => {
+        if ([1, 2, 3, 4, 5].includes(taste[t.key])) result[t.key] = taste[t.key];
+      });
+    }
+    return result;
+  }
+
+  // 記録の一覧から、項目ごとの平均を出す（付いていない記録は数えない）
+  function averageTaste(list) {
+    const avg = {};
+    TASTES.forEach(t => {
+      const values = list.map(r => r.taste[t.key]).filter(v => v !== undefined);
+      if (values.length) avg[t.key] = values.reduce((a, b) => a + b, 0) / values.length;
+    });
+    return avg;
+  }
+
+  // 5角形のレーダーチャート（SVG）を作る
+  //   values：{ acidity: 4, body: 2.5, … }（付いていない項目は無し）
+  function radarChart(values) {
+    const NS = "http://www.w3.org/2000/svg";
+    const make = (tag, attrs, text) => {
+      const e = document.createElementNS(NS, tag);
+      Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v));
+      if (text !== undefined) e.textContent = text;
+      return e;
+    };
+    const W = 340, H = 290, cx = 170, cy = 152, R = 88;
+    // i 番目の軸の、強さ level（0〜5）の位置。一番上から時計回りに72度ずつ
+    const point = (i, level) => {
+      const angle = (-90 + i * 72) * Math.PI / 180;
+      return [cx + Math.cos(angle) * R * level / 5, cy + Math.sin(angle) * R * level / 5];
+    };
+    const pointsText = list => list.map(p => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
+
+    const names = TASTES.map(t => t.name + (values[t.key] !== undefined ? " " + format(values[t.key]) : " 未入力"));
+    const svg = make("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "味チャート：" + names.join("、") });
+
+    // 目盛りの5角形（1〜5）と、中心から伸びる線
+    for (let level = 1; level <= 5; level++) {
+      svg.appendChild(make("polygon", { class: "grid", points: pointsText(TASTES.map((_, i) => point(i, level))) }));
+    }
+    TASTES.forEach((_, i) => {
+      const [x, y] = point(i, 5);
+      svg.appendChild(make("line", { class: "axis", x1: cx, y1: cy, x2: x, y2: y }));
+    });
+    // 目盛りの数字（上の軸にだけ小さく）
+    [1, 3, 5].forEach(level => {
+      const [x, y] = point(0, level);
+      svg.appendChild(make("text", { class: "tick", x: x + 5, y: y + 4 }, level));
+    });
+
+    // 付いている項目だけを、順番につないだ形
+    const rated = TASTES.map((t, i) => ({ t, i })).filter(o => values[o.t.key] !== undefined);
+    const dots = rated.map(o => point(o.i, values[o.t.key]));
+    if (dots.length >= 3) svg.appendChild(make("polygon", { class: "shape", points: pointsText(dots) }));
+    if (dots.length === 2) svg.appendChild(make("polyline", { class: "shape", points: pointsText(dots) }));
+    rated.forEach((o, n) => {
+      const dot = make("circle", { class: "point", cx: dots[n][0], cy: dots[n][1], r: 5 });
+      dot.appendChild(make("title", {}, o.t.name + "：" + format(values[o.t.key]))); // 長押し・マウスで数字が出る
+      svg.appendChild(dot);
+    });
+
+    // 項目名と数字（軸の外側に2行で）
+    TASTES.forEach((t, i) => {
+      const [x, y] = point(i, 5 + 1.6);
+      const has = values[t.key] !== undefined;
+      svg.appendChild(make("text", { class: "label", x: x, y: y - 2, "text-anchor": "middle" }, t.name));
+      svg.appendChild(make("text", { class: "value" + (has ? "" : " none"), x: x, y: y + 16, "text-anchor": "middle" },
+        has ? format(values[t.key]) : "―"));
+    });
+    return svg;
+  }
+
+  // チャートを表示する（何も付いていなければ、チャートを隠して案内を出す）
+  function showChart(boxId, noteId, values, note, emptyNote) {
+    const box = $(boxId);
+    box.innerHTML = "";
+    const hasAny = Object.keys(values).length > 0;
+    if (hasAny) box.appendChild(radarChart(values));
+    box.hidden = !hasAny;
+    $(noteId).textContent = hasAny ? note : emptyNote;
+  }
+
   // ----- データの形のチェック -----
 
   function isValidRecipe(recipe) {
@@ -1357,6 +1539,7 @@
       grind: textOf(r.grind),
       timeSec: Number.isInteger(r.timeSec) && r.timeSec >= 0 ? r.timeSec : null,
       memo: textOf(r.memo),
+      taste: normalizeTaste(r.taste), // 味チャート（付けた項目だけ）
       // 各投の注ぎ始めの時間（秒）。蒸らしが先頭。わからない回は null
       pourTimes: r.recipe.totals.map((_, i) => {
         const v = Array.isArray(r.pourTimes) ? r.pourTimes[i] : null;
@@ -1576,6 +1759,7 @@
       grind: "",
       timeSec: timeSec,
       memo: "",
+      taste: {},
       pourTimes: pourTimes,
       recipe: recipe
     });
@@ -1621,6 +1805,8 @@
 
     fillBeanSelect(record.beanId);
     setRating(record.rating);
+    formTaste = { ...record.taste };
+    updateTasteInputs();
     tempInput.value = record.temp !== null ? record.temp : "";
     grindInput.value = record.grind;
     brewTimeInput.value = record.timeSec !== null ? secToText(record.timeSec) : "";
@@ -1649,6 +1835,52 @@
   $("stars").addEventListener("click", e => {
     const button = e.target.closest("button");
     if (button) setRating(Number(button.dataset.star));
+  });
+
+  // ----- 味チャートの入力 -----
+  let formTaste = {}; // 入力中の味の評価（付けた項目だけ入る）
+
+  // 5項目ぶんの「項目名・説明・1〜5のボタン」を作る（ページを開いたときに1回だけ）
+  TASTES.forEach(t => {
+    const field = el("div", "taste-field");
+    const head = el("div", "taste-head");
+    head.append(el("span", "taste-name", t.name), el("span", "taste-value"));
+    const scale = el("div", "scale");
+    scale.dataset.key = t.key;
+    for (let n = 1; n <= 5; n++) {
+      const button = el("button", "", n);
+      button.type = "button";
+      button.dataset.level = n;
+      button.setAttribute("aria-label", t.name + " " + n);
+      scale.appendChild(button);
+    }
+    const ends = el("div", "scale-ends");
+    ends.append(el("span", "", "弱い"), el("span", "", "強い"));
+    field.append(head, el("p", "taste-help", t.help), scale, ends);
+    $("tasteInputs").appendChild(field);
+  });
+
+  // 入力中の値に合わせて、ボタンの色と「4 / 5」の表示を変える
+  function updateTasteInputs() {
+    $("tasteInputs").querySelectorAll(".taste-field").forEach(field => {
+      const key = field.querySelector(".scale").dataset.key;
+      const value = formTaste[key];
+      field.querySelectorAll(".scale button").forEach(b => {
+        b.classList.toggle("selected", Number(b.dataset.level) === value);
+      });
+      field.querySelector(".taste-value").textContent = value ? value + " / 5" : "未入力";
+    });
+  }
+
+  // 数字を押したとき（同じ数字をもう一度押すと未入力に戻る）
+  $("tasteInputs").addEventListener("click", e => {
+    const button = e.target.closest("button");
+    if (!button) return;
+    const key = button.parentElement.dataset.key;
+    const level = Number(button.dataset.level);
+    if (formTaste[key] === level) delete formTaste[key];
+    else formTaste[key] = level;
+    updateTasteInputs();
   });
 
   // 「＋ 新しい豆を登録」：豆を登録したら、この記録画面に戻ってくる
@@ -1683,6 +1915,7 @@
       grind: grindInput.value.trim(),
       timeSec: timeSec,
       memo: memoInput.value.trim(),
+      taste: normalizeTaste(formTaste),
       pourTimes: pourTimes,
       recipe: draft.recipe
     };
@@ -1821,6 +2054,12 @@
     $("beanRecordCount").textContent = list.length;
     renderRecordItems($("beanRecordList"), list);
     $("beanRecordsEmpty").hidden = list.length > 0;
+
+    // その豆の記録の平均チャート（味チャートを付けた記録だけで平均する）
+    const withTaste = list.filter(r => Object.keys(r.taste).length > 0);
+    showChart("beanChart", "beanChartNote", averageTaste(withTaste),
+      "味チャートを付けた記録 " + withTaste.length + "件の平均です（項目ごとに、付けた記録だけで計算）。",
+      "味チャートを付けた記録がまだありません。");
 
     showView("beanView");
   }
@@ -1992,6 +2231,8 @@
     addInfo(info, "抽出時間", r.timeSec !== null ? secToText(r.timeSec) : "");
     addInfo(info, "味のメモ", r.memo);
     showRecipe($("detailRecipe"), r.recipe, r.pourTimes);
+    showChart("detailChart", "detailChartNote", r.taste, "",
+      "味チャートはまだ付いていません（「編集」から付けられます）。");
 
     showView("detailView");
   }
