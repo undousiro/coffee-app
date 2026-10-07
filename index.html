@@ -527,6 +527,49 @@
     .chart .value.none { fill: var(--line); }
     .chart .tick { font-size: 10px; fill: var(--sub); }
 
+    /* ===== 次の1杯の調整ヒント ===== */
+    .choices.two { grid-template-columns: 1fr 1fr; }
+    .choices.two button { font-size: 16px; padding: 4px; }
+    .adjust-question {
+      margin: 0 0 10px;
+      font-size: 17px;
+      font-weight: bold;
+    }
+    .adjust-lead { margin: 16px 0 8px; font-size: 16px; }
+    /* 「一度に変えるのは1つだけ」 */
+    .one-at-a-time {
+      margin: 0 0 8px;
+      padding: 10px 12px;
+      font-size: 15px;
+      font-weight: bold;
+      color: var(--main-dark);
+      background: var(--bg);
+      border-left: 5px solid var(--main);
+      border-radius: 8px;
+    }
+    /* 選べる調整方法 */
+    .option-card {
+      display: block;
+      width: 100%;
+      margin-top: 8px;
+      padding: 12px 14px;
+      text-align: left;
+      font: inherit;
+      color: var(--text);
+      background: #fff;
+      border: 2px solid var(--line);
+      border-radius: 12px;
+      cursor: pointer;
+    }
+    .option-card.selected {
+      border-color: var(--main);
+      background: var(--card);
+      box-shadow: inset 0 0 0 1px var(--main);
+    }
+    .option-card .option-title { display: block; font-size: 17px; font-weight: bold; }
+    .option-card .option-detail { display: block; margin-top: 2px; font-size: 15px; color: var(--sub); }
+    .option-card.selected .option-title::before { content: "✓ "; color: var(--main); }
+
     /* ボタンを素早く押しても画面が拡大されないようにする */
     button { touch-action: manipulation; }
 
@@ -904,6 +947,18 @@
       <h2>計算機の値</h2>
       <dl class="info" id="detailRecipe"></dl>
     </section>
+    <section class="card">
+      <h2>次の1杯の調整ヒント</h2>
+      <p class="adjust-question" id="adjustQuestion"></p>
+      <!-- ボタンと中身は JavaScript で作る（文章は ADJUST_HINTS にまとめてある） -->
+      <div class="choices two" id="adjustGoals"></div>
+      <div id="adjustBody" hidden>
+        <p class="adjust-lead" id="adjustLead"></p>
+        <p class="one-at-a-time" id="adjustOneAtATime"></p>
+        <div id="adjustOptions"></div>
+        <button type="button" class="primary" id="adjustApply">この調整で淹れる</button>
+      </div>
+    </section>
     <div class="button-row">
       <button type="button" class="secondary" id="editButton">編集</button>
       <button type="button" class="secondary danger" id="deleteButton">削除</button>
@@ -1264,6 +1319,7 @@
   let formTimeInputs = [];     // 各投の時間の入力欄
   let draftFromTimer = false;  // タイマーから記録を始めたかどうか
   let preferredBeanId = null;  // ベストレシピを読み込んだ豆（記録するとき最初に選んでおく）
+  let nextPlan = null;         // 調整ヒントで決めた次の湯温・挽き目（{ temp, grind }）
   let migrationReport = null;  // 豆ごとにまとめた結果（まとめた直後だけ入る）
   let legacyBackupText = null; // まとめる前のデータ（文字）
   let mergeChecked = new Set();// 「豆をまとめる」でチェックした豆のID
@@ -1755,8 +1811,9 @@
       date: new Date().toISOString(),
       beanId: defaultBeanId(),
       rating: 0,
-      temp: null,
-      grind: "",
+      // 調整ヒントから淹れるときは、次の湯温・挽き目を入れておく
+      temp: nextPlan ? nextPlan.temp : null,
+      grind: nextPlan ? nextPlan.grind : "",
       timeSec: timeSec,
       memo: "",
       taste: {},
@@ -1932,6 +1989,7 @@
     } else {
       if (draftFromTimer) resetTimer(); // タイマーの結果は記録したので片付ける
       preferredBeanId = null;
+      nextPlan = null;
       openBean(beanId);            // 新しい記録のあとは、その豆の画面へ
     }
   });
@@ -2066,7 +2124,13 @@
 
   // ベストレシピを計算機に読み込む
   function loadRecipeToCalc(record, bean) {
-    const r = record.recipe;
+    nextPlan = null; // 調整ヒントの予定は使わない
+    applyRecipeToCalc(record.recipe, bean.id,
+      "「" + bean.name + "」のベストレシピ（" + starText(record.rating) + "・" + formatDay(record.date) + "）を読み込みました。");
+  }
+
+  // レシピを計算機に入れて、計算機の画面を開く（noteText は上に出すお知らせ）
+  function applyRecipeToCalc(r, beanId, noteText) {
 
     // 比率：1:15／16／17 ならそのボタン、それ以外は「自由」に入れる
     if ([15, 16, 17].includes(r.ratio)) {
@@ -2094,11 +2158,10 @@
     showSteps();
     save();
 
-    preferredBeanId = bean.id; // 記録するとき、この豆を最初に選んでおく
+    preferredBeanId = beanId; // 記録するとき、この豆を最初に選んでおく
     $("recordError").hidden = true;
     const note = $("loadedNote");
-    note.textContent = "「" + bean.name + "」のベストレシピ（" + starText(record.rating) + "・" +
-      formatDay(record.date) + "）を読み込みました。";
+    note.textContent = noteText;
     note.hidden = false;
     showView("calcView");
   }
@@ -2213,6 +2276,243 @@
     }
   });
 
+  // =====================================================
+  // ★ 次の1杯の調整ヒント：文章と数字（ここを書き換えると表示が変わります）
+  // =====================================================
+  //   ・{before} {after} などの { } は、記録の値が自動で入る場所です。消さずに残してください。
+  //   ・step は1回で変える量、max / min / limit はそれ以上変えない上限・下限です。
+  const ADJUST_HINTS = {
+    question: "次はどうしたい？",
+    oneAtATime: "⚠ 一度に変えるのは1つだけ。2つ以上変えると、どれが効いたのか分からなくなります。",
+
+    // ボタン（並び順のとおりに表示）と、それぞれで選べる調整方法
+    goals: [
+      {
+        key: "lessSour",
+        button: "酸味を減らしたい",
+        lead: "酸っぱさが強いときは、成分がまだ出きっていない（抽出が足りない）ことが多いです。下のどれか1つを選んでください。",
+        options: ["grindFiner", "tempUp", "timeLonger"]
+      },
+      {
+        key: "lessBitter",
+        button: "苦みを減らしたい",
+        lead: "苦みが強いときは、成分が出すぎている（抽出しすぎ）ことが多いです。下のどれか1つを選んでください。",
+        options: ["grindCoarser", "tempDown", "timeShorter"]
+      },
+      {
+        key: "stronger",
+        button: "もっと濃くしたい",
+        lead: "お湯の量はそのままで、豆を増やします（比率を 1:14 寄りに）。",
+        options: ["ratioStronger"]
+      },
+      {
+        key: "weaker",
+        button: "もっと薄くしたい",
+        lead: "豆の量はそのままで、お湯を増やします（比率を 1:16〜17 寄りに）。",
+        options: ["ratioWeaker"]
+      }
+    ],
+
+    // 調整方法ごとの文章
+    //   known：今回の値が記録されているとき／unknown：記録されていないとき／atLimit：上限・下限に届いているとき
+    options: {
+      grindFiner: {
+        title: "挽き目を細かくする",
+        known: "今回「{before}」→ 1段階細かく",
+        unknown: "今回の挽き目は未記録です。いつもより1段階細かくしてください。"
+      },
+      grindCoarser: {
+        title: "挽き目を粗くする",
+        known: "今回「{before}」→ 1段階粗く",
+        unknown: "今回の挽き目は未記録です。いつもより1段階粗くしてください。"
+      },
+      tempUp: {
+        title: "湯温を上げる",
+        step: 2, max: 96,
+        known: "湯温 {before}℃ → {after}℃",
+        unknown: "今回の湯温は未記録です。いつもより{step}℃ほど上げてください。",
+        atLimit: "湯温 {before}℃ はもう十分高いので、ほかの方法を選んでください。"
+      },
+      tempDown: {
+        title: "湯温を下げる",
+        step: 2, min: 82,
+        known: "湯温 {before}℃ → {after}℃",
+        unknown: "今回の湯温は未記録です。いつもより{step}℃ほど下げてください。",
+        atLimit: "湯温 {before}℃ はもう十分低いので、ほかの方法を選んでください。"
+      },
+      timeLonger: {
+        title: "抽出時間を長くする",
+        step: 20, // 秒
+        known: "抽出時間 {before} → {after} くらい（注ぐペースをゆっくりにする）",
+        unknown: "今回の抽出時間は未記録です。いつもより{step}秒ほど長くなるよう、ゆっくり注いでください。"
+      },
+      timeShorter: {
+        title: "抽出時間を短くする",
+        step: 20, min: 60, // 秒
+        known: "抽出時間 {before} → {after} くらい（注ぐペースを少し速くする）",
+        unknown: "今回の抽出時間は未記録です。いつもより{step}秒ほど短くなるよう、少し速く注いでください。",
+        atLimit: "抽出時間 {before} はもう十分短いので、ほかの方法を選んでください。"
+      },
+      ratioStronger: {
+        title: "豆を増やす（濃くする）",
+        step: 1, limit: 14,
+        known: "比率 1:{before} → 1:{after}（豆 {beansBefore}g → {beansAfter}g、湯量 {water}ml はそのまま）",
+        atLimit: "比率 1:{before} はすでに 1:14 より濃いので、0.5だけ濃くします：1:{after}（豆 {beansBefore}g → {beansAfter}g）"
+      },
+      ratioWeaker: {
+        title: "お湯を増やす（薄くする）",
+        step: 1, limit: 17,
+        known: "比率 1:{before} → 1:{after}（湯量 {waterBefore}ml → {waterAfter}ml、豆 {beans}g はそのまま）",
+        atLimit: "比率 1:{before} はすでに 1:17 より薄いので、0.5だけ薄くします：1:{after}（湯量 {waterBefore}ml → {waterAfter}ml）"
+      }
+    },
+
+    // 「この調整で淹れる」を押したとき、計算機の上に出すお知らせ
+    calcNote: "次の1杯（{date}の記録をもとに）：{title}。{detail}",
+    calcNoteSame: "計算機の値は前回と同じです。"
+  };
+  // =====================================================
+
+  // ----- 調整ヒントのしくみ -----
+
+  let adjustGoal = null;   // 選んだ「次はどうしたい？」
+  let adjustChoice = null; // 選んだ調整方法
+
+  // 文章の {名前} を、値に置きかえる
+  function fillText(template, values) {
+    return template.replace(/\{(\w+)\}/g, (all, name) => (values[name] !== undefined ? values[name] : all));
+  }
+
+  const round1 = n => Math.round(n * 10) / 10;
+
+  // 比率を変えたレシピを作る（keep："water"＝湯量そのまま／"beans"＝豆そのまま）
+  // 蒸らしと各回の量は、もとのレシピと同じ割合になるように増減する
+  function recipeWithRatio(r, newRatio, keep) {
+    const water = keep === "water" ? r.water : round1(r.beans * newRatio);
+    const beans = keep === "water" ? round1(r.water / newRatio) : r.beans;
+    const bloom = round1(r.bloom * beans / r.beans);
+    const factor = (water - bloom) / (r.water - r.bloom);
+    const pours = r.pours.map(p => round1(p * factor));
+    pours[pours.length - 1] = round1(water - bloom - pours.slice(0, -1).reduce((a, b) => a + b, 0));
+    let sum = 0;
+    const totals = [bloom, ...pours].map(a => round1(sum += a));
+    return { beans, water, ratio: newRatio, bloom, pours, totals };
+  }
+
+  // 調整方法を、その記録の値で具体的にする
+  //   戻り値：title（方法）、detail（具体的な内容）、disabled（選べない）、
+  //           recipe（計算機に入れるレシピ）、temp・grind（次の記録に入れておく値）
+  function makeAdjustment(record, key) {
+    const o = ADJUST_HINTS.options[key];
+    const result = { title: o.title, detail: "", disabled: false, recipe: record.recipe, temp: record.temp, grind: record.grind };
+
+    if (key === "grindFiner" || key === "grindCoarser") {
+      result.detail = record.grind ? fillText(o.known, { before: record.grind }) : o.unknown;
+      result.grind = ""; // 挽き目を変えるので、前回の挽き目は入れておかない
+
+    } else if (key === "tempUp" || key === "tempDown") {
+      if (record.temp === null) {
+        result.detail = fillText(o.unknown, { step: o.step });
+      } else {
+        const after = key === "tempUp" ? Math.min(o.max, record.temp + o.step) : Math.max(o.min, record.temp - o.step);
+        result.disabled = after === record.temp;
+        result.detail = fillText(result.disabled ? o.atLimit : o.known, { before: format(record.temp), after: format(after) });
+        result.temp = after;
+      }
+
+    } else if (key === "timeLonger" || key === "timeShorter") {
+      if (record.timeSec === null) {
+        result.detail = fillText(o.unknown, { step: o.step });
+      } else {
+        const after = key === "timeLonger" ? record.timeSec + o.step : Math.max(o.min, record.timeSec - o.step);
+        result.disabled = after === record.timeSec;
+        result.detail = fillText(result.disabled ? o.atLimit : o.known, { before: secToText(record.timeSec), after: secToText(after) });
+      }
+
+    } else if (key === "ratioStronger" || key === "ratioWeaker") {
+      const stronger = key === "ratioStronger";
+      const before = record.recipe.ratio;
+      // すでに目安（1:14／1:17）を越えているときは、0.5だけ動かす
+      const atLimit = stronger ? before <= o.limit : before >= o.limit;
+      const after = round1(atLimit
+        ? before + (stronger ? -0.5 : 0.5)
+        : (stronger ? Math.max(o.limit, before - o.step) : Math.min(o.limit, before + o.step)));
+      const recipe = recipeWithRatio(record.recipe, after, stronger ? "water" : "beans");
+      result.recipe = recipe;
+      result.detail = fillText(atLimit ? o.atLimit : o.known, {
+        before: format(before), after: format(after),
+        beansBefore: format(record.recipe.beans), beansAfter: format(recipe.beans), beans: format(recipe.beans),
+        waterBefore: format(record.recipe.water), waterAfter: format(recipe.water), water: format(recipe.water)
+      });
+    }
+    return result;
+  }
+
+  // 「次はどうしたい？」のボタンを作る（ページを開いたときに1回だけ）
+  $("adjustQuestion").textContent = ADJUST_HINTS.question;
+  $("adjustOneAtATime").textContent = ADJUST_HINTS.oneAtATime;
+  ADJUST_HINTS.goals.forEach(goal => {
+    const button = el("button", "", goal.button);
+    button.type = "button";
+    button.dataset.goal = goal.key;
+    $("adjustGoals").appendChild(button);
+  });
+
+  // 調整ヒントの表示を作り直す
+  function renderAdjust() {
+    const record = records.find(r => r.id === currentId);
+    if (!record) return;
+    $("adjustGoals").querySelectorAll("button").forEach(b => {
+      b.classList.toggle("selected", b.dataset.goal === adjustGoal);
+    });
+
+    const goal = ADJUST_HINTS.goals.find(g => g.key === adjustGoal);
+    $("adjustBody").hidden = !goal;
+    if (!goal) return;
+    $("adjustLead").textContent = goal.lead;
+
+    const box = $("adjustOptions");
+    box.innerHTML = "";
+    goal.options.forEach(key => {
+      const adj = makeAdjustment(record, key);
+      const button = el("button", "option-card" + (adjustChoice === key ? " selected" : ""));
+      button.type = "button";
+      button.disabled = adj.disabled;
+      button.append(el("span", "option-title", adj.title), el("span", "option-detail", adj.detail));
+      button.addEventListener("click", () => {
+        adjustChoice = key;
+        renderAdjust();
+      });
+      box.appendChild(button);
+    });
+    $("adjustApply").disabled = !adjustChoice;
+    $("adjustApply").textContent = adjustChoice ? "この調整で淹れる" : "上から1つ選んでください";
+  }
+
+  // 「次はどうしたい？」のボタンを押したとき
+  $("adjustGoals").addEventListener("click", e => {
+    const button = e.target.closest("button");
+    if (!button) return;
+    adjustGoal = button.dataset.goal;
+    const goal = ADJUST_HINTS.goals.find(g => g.key === adjustGoal);
+    // 方法が1つだけなら、最初から選んでおく
+    const record = records.find(r => r.id === currentId);
+    adjustChoice = goal.options.length === 1 && !makeAdjustment(record, goal.options[0]).disabled ? goal.options[0] : null;
+    renderAdjust();
+  });
+
+  // 「この調整で淹れる」：変更後の値を計算機に入れる
+  $("adjustApply").addEventListener("click", () => {
+    const record = records.find(r => r.id === currentId);
+    if (!record || !adjustChoice) return;
+    const adj = makeAdjustment(record, adjustChoice);
+    const sameRecipe = adj.recipe === record.recipe;
+    nextPlan = { temp: adj.temp, grind: adj.grind }; // 次に記録するとき、湯温・挽き目を入れておく
+    const note = fillText(ADJUST_HINTS.calcNote, { date: formatDay(record.date), title: adj.title, detail: adj.detail }) +
+      (sameRecipe ? " " + ADJUST_HINTS.calcNoteSame : "");
+    applyRecipeToCalc(adj.recipe, record.beanId, note);
+  });
+
   // ----- 記録の詳細画面 -----
 
   function openDetail(id) {
@@ -2233,6 +2533,11 @@
     showRecipe($("detailRecipe"), r.recipe, r.pourTimes);
     showChart("detailChart", "detailChartNote", r.taste, "",
       "味チャートはまだ付いていません（「編集」から付けられます）。");
+
+    // 調整ヒントは、何も選んでいない状態から
+    adjustGoal = null;
+    adjustChoice = null;
+    renderAdjust();
 
     showView("detailView");
   }
