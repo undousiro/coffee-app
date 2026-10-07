@@ -530,6 +530,9 @@
     /* ===== 次の1杯の調整ヒント ===== */
     .choices.two { grid-template-columns: 1fr 1fr; }
     .choices.two button { font-size: 16px; padding: 4px; }
+    /* ボタンが奇数個のとき、最後の1つは横いっぱいに */
+    .choices.two button:last-child:nth-child(odd) { grid-column: 1 / -1; }
+    #adjustExtra { font-size: 15px; font-weight: bold; color: var(--main-dark); }
     .adjust-question {
       margin: 0 0 10px;
       font-size: 17px;
@@ -956,6 +959,7 @@
         <p class="adjust-lead" id="adjustLead"></p>
         <p class="one-at-a-time" id="adjustOneAtATime"></p>
         <div id="adjustOptions"></div>
+        <p class="note" id="adjustExtra" hidden></p>
         <button type="button" class="primary" id="adjustApply">この調整で淹れる</button>
       </div>
     </section>
@@ -2310,6 +2314,13 @@
         button: "もっと薄くしたい",
         lead: "豆の量はそのままで、お湯を増やします（比率を 1:16〜17 寄りに）。",
         options: ["ratioWeaker"]
+      },
+      {
+        key: "moreBody",
+        button: "コクを増やしたい",
+        lead: "濃さは「味の強さ」、コクは「口当たりの重さ」です。重さ・とろみを出したいときは、下のどれか1つを選んでください。",
+        options: ["ratioStronger", "grindFinerSlight", "poursFewer", "bloomLonger"],
+        extra: "※ コクは豆の焙煎度の影響も大きいです。中深煎り〜深煎りの豆も試してみてください。"
       }
     ],
 
@@ -2325,6 +2336,24 @@
         title: "挽き目を粗くする",
         known: "今回「{before}」→ 1段階粗く",
         unknown: "今回の挽き目は未記録です。いつもより1段階粗くしてください。"
+      },
+      grindFinerSlight: {
+        title: "挽き目を少し細かくする",
+        known: "今回「{before}」→ ほんの少し細かく",
+        unknown: "今回の挽き目は未記録です。いつもより少しだけ細かくしてください。"
+      },
+      poursFewer: {
+        title: "注ぐ回数を減らす・ゆっくり注ぐ",
+        min: 2,
+        known: "注ぐ回数 {before}回 → {after}回（蒸らしのあと。1回ずつゆっくり注ぐ）",
+        atLimit: "注ぐ回数はすでに{before}回なので、回数はそのままで1回ずつゆっくり注いでください。"
+      },
+      bloomLonger: {
+        title: "蒸らしを長くする",
+        from: 40, to: 45, // 秒
+        known: "蒸らし時間 {before} → {from}〜{to}（1投目を注ぎ始めるまで待つ）",
+        unknown: "今回の蒸らし時間は未記録です。1投目を注ぎ始めるまで{from}〜{to}待ってください。",
+        atLimit: "蒸らし時間 {before} はもう十分長いので、ほかの方法を選んでください。"
       },
       tempUp: {
         title: "湯温を上げる",
@@ -2406,7 +2435,7 @@
     const o = ADJUST_HINTS.options[key];
     const result = { title: o.title, detail: "", disabled: false, recipe: record.recipe, temp: record.temp, grind: record.grind };
 
-    if (key === "grindFiner" || key === "grindCoarser") {
+    if (key === "grindFiner" || key === "grindCoarser" || key === "grindFinerSlight") {
       result.detail = record.grind ? fillText(o.known, { before: record.grind }) : o.unknown;
       result.grind = ""; // 挽き目を変えるので、前回の挽き目は入れておかない
 
@@ -2427,6 +2456,33 @@
         const after = key === "timeLonger" ? record.timeSec + o.step : Math.max(o.min, record.timeSec - o.step);
         result.disabled = after === record.timeSec;
         result.detail = fillText(result.disabled ? o.atLimit : o.known, { before: secToText(record.timeSec), after: secToText(after) });
+      }
+
+    } else if (key === "poursFewer") {
+      const before = record.recipe.pours.length;
+      if (before <= o.min) {
+        result.detail = fillText(o.atLimit, { before: before });
+      } else {
+        // 蒸らしのあとのお湯を、1回少ない回数で均等に分け直す
+        const r = record.recipe;
+        const each = round1((r.water - r.bloom) / (before - 1));
+        const pours = new Array(before - 1).fill(each);
+        pours[pours.length - 1] = round1(r.water - r.bloom - each * (before - 2));
+        let sum = 0;
+        result.recipe = { ...r, pours, totals: [r.bloom, ...pours].map(a => round1(sum += a)) };
+        result.detail = fillText(o.known, { before: before, after: before - 1 });
+      }
+
+    } else if (key === "bloomLonger") {
+      // 蒸らし時間＝1投目を注ぎ始めた時間（タイマーや手入力で記録されていれば使う）
+      const bloomSec = record.pourTimes[1];
+      const values = { from: secToText(o.from), to: secToText(o.to) };
+      if (bloomSec === null || bloomSec === undefined) {
+        result.detail = fillText(o.unknown, values);
+      } else {
+        values.before = secToText(bloomSec);
+        result.disabled = bloomSec >= o.to;
+        result.detail = fillText(result.disabled ? o.atLimit : o.known, values);
       }
 
     } else if (key === "ratioStronger" || key === "ratioWeaker") {
@@ -2470,6 +2526,9 @@
     $("adjustBody").hidden = !goal;
     if (!goal) return;
     $("adjustLead").textContent = goal.lead;
+    // 補足（あれば表示）
+    $("adjustExtra").textContent = goal.extra || "";
+    $("adjustExtra").hidden = !goal.extra;
 
     const box = $("adjustOptions");
     box.innerHTML = "";
