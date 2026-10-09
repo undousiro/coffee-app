@@ -527,6 +527,30 @@
     .chart .value.none { fill: var(--line); }
     .chart .tick { font-size: 10px; fill: var(--sub); }
 
+    /* ===== ホット／アイス ===== */
+    .choices.five { grid-template-columns: repeat(5, 1fr); gap: 6px; }
+    .choices.five button { font-size: 16px; min-height: 52px; padding: 0; }
+    .sub-label { margin: 14px 0 6px; font-size: 16px; color: var(--sub); }
+    /* 合計をお湯と氷に分けた表示 */
+    .ice-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .ice-split div {
+      padding: 10px 12px;
+      text-align: center;
+      background: var(--bg);
+      border-radius: 12px;
+    }
+    .split-label { display: block; font-size: 14px; color: var(--sub); }
+    .split-value { display: block; font-size: 26px; font-weight: bold; color: var(--main-dark); }
+    #bestRecipeNote { white-space: pre-line; }
+    /* 記録の一覧の「ホット／アイス」の印 */
+    .tag.style-tag { margin: 0 8px 0 0; }
+    .tag.style-tag.ice { background: #dbe6ec; color: #2f4756; }
+
     /* ===== 次の1杯の調整ヒント ===== */
     .choices.two { grid-template-columns: 1fr 1fr; }
     .choices.two button { font-size: 16px; padding: 4px; }
@@ -698,9 +722,30 @@
   <h1>比率計算機</h1>
   <p class="loaded" id="loadedNote" hidden></p>
 
+  <!-- ⓪ ホット／アイス -->
+  <section class="card">
+    <h2>ホット／アイス</h2>
+    <div class="choices two" id="styleButtons">
+      <button type="button" data-style="hot" class="selected">☕ ホット</button>
+      <button type="button" data-style="ice">🧊 アイス</button>
+    </div>
+    <!-- 「アイス」のときだけ表示 -->
+    <div id="iceBox" hidden>
+      <p class="sub-label">氷の割合（お湯＋氷の合計に対して）</p>
+      <div class="choices five" id="iceButtons">
+        <button type="button" data-ice="30">30%</button>
+        <button type="button" data-ice="35">35%</button>
+        <button type="button" data-ice="40" class="selected">40%</button>
+        <button type="button" data-ice="45">45%</button>
+        <button type="button" data-ice="50">50%</button>
+      </div>
+      <p class="note">比率は「お湯＋氷」の合計で計算します。注ぐお湯は、合計から氷を引いた量です。</p>
+    </div>
+  </section>
+
   <!-- ① 比率を選ぶ -->
   <section class="card">
-    <h2>比率（豆 : お湯）</h2>
+    <h2 id="ratioTitle">比率（豆 : お湯）</h2>
     <div class="choices" id="ratioButtons">
       <button type="button" data-ratio="15">1:15</button>
       <button type="button" data-ratio="16" class="selected">1:16</button>
@@ -725,10 +770,21 @@
       <input type="number" id="beans" inputmode="decimal" min="0" step="0.1" placeholder="例：15">
       <span class="unit">g</span>
     </div>
-    <label for="water">お湯の量</label>
+    <label for="water" id="waterLabel">お湯の量</label>
     <div class="input-row">
       <input type="number" id="water" inputmode="decimal" min="0" step="0.1" placeholder="例：240">
       <span class="unit">ml</span>
+    </div>
+    <!-- 「アイス」のときだけ表示：合計をお湯と氷に分けた量 -->
+    <div class="ice-split" id="iceSplit" hidden>
+      <div>
+        <span class="split-label">注ぐお湯</span>
+        <span class="split-value" id="hotWaterValue">―</span>
+      </div>
+      <div>
+        <span class="split-label">氷</span>
+        <span class="split-value" id="iceValue">―</span>
+      </div>
     </div>
   </section>
 
@@ -785,7 +841,12 @@
   <div id="beanView" hidden>
     <h1 id="beanTitle"></h1>
     <p class="center" id="beanFinishedTag" hidden><span class="tag">飲み終わった</span></p>
-    <button type="button" class="primary" id="bestRecipeButton">☕ この豆のベストレシピで淹れる</button>
+    <p class="adjust-question">この豆のベストレシピで淹れる</p>
+    <!-- ホットとアイスでは最適なレシピが違うので、別々に選ぶ -->
+    <div class="button-row">
+      <button type="button" class="primary" id="bestHotButton">☕ ホット</button>
+      <button type="button" class="primary" id="bestIceButton">🧊 アイス</button>
+    </div>
     <p class="note" id="bestRecipeNote"></p>
 
     <section class="card section-gap">
@@ -1030,6 +1091,8 @@
   let lastInput = "beans"; // 最後に入力したのは「豆」か「お湯」か
   let bloomManual = null;  // 手入力した蒸らし量（null のときは自動＝豆×2）
   let pourManual = [];     // 各回の手入力量（null の回は自動）。最後の1投は含めない
+  let brewStyle = "hot";   // "hot"（ホット）/ "ice"（アイス）
+  let icePercent = 40;     // アイスのときの氷の割合（お湯＋氷の合計に対して、%）
 
   // ブラウザに保存するときの名前
   const STORAGE_KEY = "coffee-calculator";
@@ -1074,11 +1137,19 @@
     showSteps();
   }
 
-  // 蒸らし＋各回の注ぐ量を計算する
+  // 合計の量（ホット＝お湯、アイス＝お湯＋氷）を、注ぐお湯と氷に分ける
+  function splitWater(total) {
+    if (brewStyle !== "ice") return { water: total, ice: 0 };
+    const ice = Math.round(total * icePercent / 100 * 10) / 10;
+    return { water: Math.round((total - ice) * 10) / 10, ice: ice };
+  }
+
+  // 蒸らし＋各回の注ぐ量を計算する（アイスのときは、注ぐお湯の量だけで計算する）
   function makePlan() {
     const beans = parseFloat(beansInput.value);
-    const water = parseFloat(waterInput.value);
-    if (!(beans > 0) || !(water > 0)) return null;
+    const total = parseFloat(waterInput.value);
+    if (!(beans > 0) || !(total > 0)) return null;
+    const { water, ice } = splitWater(total);
 
     // 蒸らし：手入力があればそれ、なければ豆の2倍
     const bloom = bloomManual !== null ? bloomManual : beans * 2;
@@ -1105,7 +1176,7 @@
     // 最後の1投＝総湯量 − それまでの合計
     amounts.push(water - bloom - used);
 
-    return { water, bloom, amounts };
+    return { water, ice, total, bloom, amounts };
   }
 
   // 一覧の行（蒸らし＋注ぐ回数ぶん）を作り直す
@@ -1150,6 +1221,10 @@
   function showSteps(editing) {
     const plan = makePlan();
 
+    // アイスのとき：注ぐお湯と氷の量を表示
+    $("hotWaterValue").textContent = plan ? format(plan.water) + " ml" : "―";
+    $("iceValue").textContent = plan ? format(plan.ice) + " g" : "―";
+
     // まだ入力されていないとき
     if (!plan) {
       stepsList.hidden = true;
@@ -1181,9 +1256,30 @@
       message.className = "note warning";
       rows[rows.length - 1].li.classList.add("over");
     } else {
-      message.textContent = "スケールがこの数字になるまで注ぎます。";
+      message.textContent = brewStyle === "ice"
+        ? "氷を入れたサーバーをスケールにのせ、0にしてから注ぎます。スケールがこの数字になるまで注ぎます（お湯の量だけ）。"
+        : "スケールがこの数字になるまで注ぎます。";
       message.className = "note";
     }
+  }
+
+  // ホット／アイスを切り替える（見出しや入力欄の名前も変える）
+  function applyStyle(style) {
+    brewStyle = style === "ice" ? "ice" : "hot";
+    const ice = brewStyle === "ice";
+    const group = $("styleButtons");
+    selectButton(group, group.querySelector('[data-style="' + brewStyle + '"]'));
+    $("iceBox").hidden = !ice;
+    $("iceSplit").hidden = !ice;
+    $("ratioTitle").textContent = ice ? "比率（豆 : お湯＋氷）" : "比率（豆 : お湯）";
+    $("waterLabel").textContent = ice ? "合計の量（お湯＋氷）" : "お湯の量";
+  }
+
+  // 氷の割合を切り替える（30〜50%）
+  function applyIcePercent(percent) {
+    icePercent = [30, 35, 40, 45, 50].includes(percent) ? percent : 40;
+    const group = $("iceButtons");
+    selectButton(group, group.querySelector('[data-ice="' + icePercent + '"]'));
   }
 
   // 注ぐ回数が変わったとき：手入力をリセットして行を作り直す
@@ -1221,7 +1317,9 @@
       ratioChoice: ratioChoice,
       customRatio: customInput.value,
       bloom: bloomManual,
-      pours: pours
+      pours: pours,
+      style: brewStyle,
+      icePercent: icePercent
     };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -1243,6 +1341,8 @@
     if (parseFloat(data.customRatio) > 0) customInput.value = data.customRatio;
     if (["15", "16", "17", "custom"].includes(data.ratioChoice)) applyRatioChoice(data.ratioChoice);
     if (typeof data.bloom === "number" && data.bloom >= 0) bloomManual = data.bloom;
+    applyStyle(data.style);
+    applyIcePercent(data.icePercent);
     if ([2, 3, 4].includes(data.pours)) {
       const group = document.getElementById("pourButtons");
       selectButton(group, group.querySelector('[data-pours="' + data.pours + '"]'));
@@ -1251,6 +1351,24 @@
   }
 
   // ===== ボタンや入力欄を操作したときの動き =====
+
+  // ホット／アイスを押したとき
+  document.getElementById("styleButtons").addEventListener("click", e => {
+    const button = e.target.closest("button");
+    if (!button) return;
+    applyStyle(button.dataset.style);
+    showSteps();
+    save();
+  });
+
+  // 氷の割合を押したとき
+  document.getElementById("iceButtons").addEventListener("click", e => {
+    const button = e.target.closest("button");
+    if (!button) return;
+    applyIcePercent(Number(button.dataset.ice));
+    showSteps();
+    save();
+  });
 
   // 比率ボタンを押したとき
   document.getElementById("ratioButtons").addEventListener("click", e => {
@@ -1424,12 +1542,47 @@
     return e;
   }
 
+  // ----- ホット／アイス -----
+
+  function isIce(recipe) {
+    return recipe.style === "ice";
+  }
+
+  // "ホット" / "アイス"
+  function styleName(style) {
+    return style === "ice" ? "アイス" : "ホット";
+  }
+
+  // 量の短い表示（ホット："湯240ml"、アイス："お湯144ml＋氷96g"）
+  function liquidText(recipe) {
+    return isIce(recipe)
+      ? "お湯" + format(recipe.water) + "ml＋氷" + format(recipe.ice) + "g"
+      : "湯" + format(recipe.water) + "ml";
+  }
+
+  // レシピの形をそろえる（ホット／アイスがない古い記録はホット扱い）
+  //   water：注ぐお湯の量、ice：氷の量（ホットは0）、icePercent：氷の割合（ホットは0）
+  function normalizeRecipe(r) {
+    const ice = r.style === "ice";
+    return {
+      ...r,
+      style: ice ? "ice" : "hot",
+      icePercent: ice && [30, 35, 40, 45, 50].includes(r.icePercent) ? r.icePercent : (ice ? 40 : 0),
+      ice: ice && typeof r.ice === "number" && r.ice >= 0 ? r.ice : 0
+    };
+  }
+
   // 計算機の値を表示する（pourTimes があれば各投の時間も並べる）
   function showRecipe(dl, recipe, pourTimes) {
     dl.innerHTML = "";
+    addInfo(dl, "種類", isIce(recipe) ? "🧊 アイス（氷 " + recipe.icePercent + "%）" : "☕ ホット");
     addInfo(dl, "比率", "1:" + format(recipe.ratio));
     addInfo(dl, "豆", format(recipe.beans) + " g");
-    addInfo(dl, "湯量", format(recipe.water) + " ml");
+    if (isIce(recipe)) {
+      addInfo(dl, "合計", format(recipe.water + recipe.ice) + " ml（お湯 " + format(recipe.water) + " ml＋氷 " + format(recipe.ice) + " g）");
+    } else {
+      addInfo(dl, "湯量", format(recipe.water) + " ml");
+    }
     addInfo(dl, "注ぐ回数", recipe.pours.length + "回（蒸らしのあと）");
     // 例："1投目  100 g ― 0:45"（スケールの累計と、注ぎ始めた時間）
     const lines = recipe.totals.map((total, i) => {
@@ -1605,7 +1758,7 @@
         const v = Array.isArray(r.pourTimes) ? r.pourTimes[i] : null;
         return Number.isInteger(v) && v >= 0 ? v : null;
       }),
-      recipe: r.recipe
+      recipe: normalizeRecipe(r.recipe)
     };
   }
 
@@ -1746,8 +1899,9 @@
   }
 
   // 評価が一番高い記録（同じ評価なら新しい方）
-  function bestRecord(beanId) {
-    return records.filter(r => r.beanId === beanId)
+  // style を渡すと、ホット／アイスの記録だけから選ぶ
+  function bestRecord(beanId, style) {
+    return records.filter(r => r.beanId === beanId && (!style || r.recipe.style === style))
       .sort((a, b) => b.rating - a.rating || b.date.localeCompare(a.date))[0] || null;
   }
 
@@ -1774,7 +1928,10 @@
     let sum = 0;
     return {
       beans: parseFloat(beansInput.value),
-      water: plan.water,
+      water: plan.water,                              // 注ぐお湯の量（アイスは氷を除く）
+      style: brewStyle,                               // "hot" / "ice"
+      icePercent: brewStyle === "ice" ? icePercent : 0,
+      ice: plan.ice,                                  // 氷の量（ホットは0）
       ratio: ratio,
       bloom: round(plan.bloom),
       pours: plan.amounts.map(round),                 // 各回に注ぐ量
@@ -2066,7 +2223,8 @@
       top.append(el("span", "", formatDate(r.date)), el("span", "star-text", starText(r.rating)));
 
       const main = el("div", "bean",
-        "豆" + format(r.recipe.beans) + "g・湯" + format(r.recipe.water) + "ml・1:" + format(r.recipe.ratio));
+        "豆" + format(r.recipe.beans) + "g・" + liquidText(r.recipe) + "・1:" + format(r.recipe.ratio));
+      main.prepend(el("span", "tag style-tag" + (isIce(r.recipe) ? " ice" : ""), styleName(r.recipe.style)));
 
       const parts = [];
       if (r.timeSec !== null) parts.push("抽出 " + secToText(r.timeSec));
@@ -2102,11 +2260,15 @@
     if (!info.children.length) addInfo(info, "情報", "まだありません（「編集」から入れられます）");
 
     const list = recordsOf(id);
-    const best = bestRecord(id);
-    $("bestRecipeButton").disabled = !best;
-    $("bestRecipeNote").textContent = best
-      ? "評価が一番高い記録：" + starText(best.rating) + "（" + formatDate(best.date) + "）"
-      : "記録がまだないので、ベストレシピはありません。";
+    // ベストレシピはホットとアイスで別々に選ぶ
+    const noteLines = ["hot", "ice"].map(style => {
+      const best = bestRecord(id, style);
+      $(style === "hot" ? "bestHotButton" : "bestIceButton").disabled = !best;
+      return styleName(style) + "：" + (best
+        ? starText(best.rating) + "（" + formatDate(best.date) + "）"
+        : "記録がまだありません");
+    });
+    $("bestRecipeNote").textContent = "評価が一番高い記録\n" + noteLines.join("\n");
 
     $("finishBeanButton").textContent = bean.finished ? "まだ飲んでいる" : "飲み終わった";
     $("mergeBeanButton").disabled = beans.length < 2;
@@ -2130,11 +2292,15 @@
   function loadRecipeToCalc(record, bean) {
     nextPlan = null; // 調整ヒントの予定は使わない
     applyRecipeToCalc(record.recipe, bean.id,
-      "「" + bean.name + "」のベストレシピ（" + starText(record.rating) + "・" + formatDay(record.date) + "）を読み込みました。");
+      "「" + bean.name + "」の" + styleName(record.recipe.style) + "のベストレシピ（" +
+      starText(record.rating) + "・" + formatDay(record.date) + "）を読み込みました。");
   }
 
   // レシピを計算機に入れて、計算機の画面を開く（noteText は上に出すお知らせ）
   function applyRecipeToCalc(r, beanId, noteText) {
+    // ホット／アイスと氷の割合
+    applyStyle(r.style);
+    if (isIce(r)) applyIcePercent(r.icePercent);
 
     // 比率：1:15／16／17 ならそのボタン、それ以外は「自由」に入れる
     if ([15, 16, 17].includes(r.ratio)) {
@@ -2157,7 +2323,7 @@
 
     // 豆とお湯の量
     beansInput.value = format(r.beans);
-    waterInput.value = format(r.water);
+    waterInput.value = format(r.water + r.ice); // アイスは「お湯＋氷」の合計を入れる
     lastInput = "beans";
     showSteps();
     save();
@@ -2170,10 +2336,12 @@
     showView("calcView");
   }
 
-  $("bestRecipeButton").addEventListener("click", () => {
-    const bean = findBean(currentBeanId);
-    const best = bestRecord(currentBeanId);
-    if (bean && best) loadRecipeToCalc(best, bean);
+  ["hot", "ice"].forEach(style => {
+    $(style === "hot" ? "bestHotButton" : "bestIceButton").addEventListener("click", () => {
+      const bean = findBean(currentBeanId);
+      const best = bestRecord(currentBeanId, style);
+      if (bean && best) loadRecipeToCalc(best, bean);
+    });
   });
 
   $("editBeanButton").addEventListener("click", () => openBeanForm(currentBeanId, "bean"));
@@ -2385,14 +2553,15 @@
       ratioStronger: {
         title: "豆を増やす（濃くする）",
         step: 1, limit: 14,
-        known: "比率 1:{before} → 1:{after}（豆 {beansBefore}g → {beansAfter}g、湯量 {water}ml はそのまま）",
+        // {waterName} は、ホットなら「湯量」、アイスなら「合計（お湯＋氷）」
+        known: "比率 1:{before} → 1:{after}（豆 {beansBefore}g → {beansAfter}g、{waterName} {water}ml はそのまま）",
         atLimit: "比率 1:{before} はすでに 1:14 より濃いので、0.5だけ濃くします：1:{after}（豆 {beansBefore}g → {beansAfter}g）"
       },
       ratioWeaker: {
         title: "お湯を増やす（薄くする）",
         step: 1, limit: 17,
-        known: "比率 1:{before} → 1:{after}（湯量 {waterBefore}ml → {waterAfter}ml、豆 {beans}g はそのまま）",
-        atLimit: "比率 1:{before} はすでに 1:17 より薄いので、0.5だけ薄くします：1:{after}（湯量 {waterBefore}ml → {waterAfter}ml）"
+        known: "比率 1:{before} → 1:{after}（{waterName} {waterBefore}ml → {waterAfter}ml、豆 {beans}g はそのまま）",
+        atLimit: "比率 1:{before} はすでに 1:17 より薄いので、0.5だけ薄くします：1:{after}（{waterName} {waterBefore}ml → {waterAfter}ml）"
       }
     },
 
@@ -2416,16 +2585,20 @@
 
   // 比率を変えたレシピを作る（keep："water"＝湯量そのまま／"beans"＝豆そのまま）
   // 蒸らしと各回の量は、もとのレシピと同じ割合になるように増減する
+  // アイスは「お湯＋氷」の合計に対して比率を計算し、合計を同じ割合でお湯と氷に分け直す
   function recipeWithRatio(r, newRatio, keep) {
-    const water = keep === "water" ? r.water : round1(r.beans * newRatio);
-    const beans = keep === "water" ? round1(r.water / newRatio) : r.beans;
+    const totalBefore = r.water + r.ice;   // ホットは氷0なので、湯量そのもの
+    const total = keep === "water" ? totalBefore : round1(r.beans * newRatio);
+    const beans = keep === "water" ? round1(totalBefore / newRatio) : r.beans;
+    const ice = isIce(r) ? round1(total * r.icePercent / 100) : 0;
+    const water = round1(total - ice);     // 注ぐお湯の量
     const bloom = round1(r.bloom * beans / r.beans);
     const factor = (water - bloom) / (r.water - r.bloom);
     const pours = r.pours.map(p => round1(p * factor));
     pours[pours.length - 1] = round1(water - bloom - pours.slice(0, -1).reduce((a, b) => a + b, 0));
     let sum = 0;
     const totals = [bloom, ...pours].map(a => round1(sum += a));
-    return { beans, water, ratio: newRatio, bloom, pours, totals };
+    return { ...r, beans, water, ice, ratio: newRatio, bloom, pours, totals };
   }
 
   // 調整方法を、その記録の値で具体的にする
@@ -2498,7 +2671,10 @@
       result.detail = fillText(atLimit ? o.atLimit : o.known, {
         before: format(before), after: format(after),
         beansBefore: format(record.recipe.beans), beansAfter: format(recipe.beans), beans: format(recipe.beans),
-        waterBefore: format(record.recipe.water), waterAfter: format(recipe.water), water: format(recipe.water)
+        waterName: isIce(recipe) ? "合計（お湯＋氷）" : "湯量",
+        waterBefore: format(record.recipe.water + record.recipe.ice),
+        waterAfter: format(recipe.water + recipe.ice),
+        water: format(recipe.water + recipe.ice)
       });
     }
     return result;
@@ -2872,7 +3048,7 @@
     const hasNext = nextIndex < recipe.totals.length;    // まだ注ぐ回が残っているか
 
     $("timerRecipe").textContent =
-      "豆" + format(recipe.beans) + "g・湯" + format(recipe.water) + "ml・1:" + format(recipe.ratio);
+      styleName(recipe.style) + "・豆" + format(recipe.beans) + "g・" + liquidText(recipe) + "・1:" + format(recipe.ratio);
     updateClock();
 
     // 各回の「累計g」と「時間」の一覧
