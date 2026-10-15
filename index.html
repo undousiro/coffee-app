@@ -655,6 +655,12 @@
       color: var(--sub);
       text-align: right;
     }
+    /* 4:6メソッドの目安の時刻と差 */
+    .timer-steps .time .target {
+      display: block;
+      font-size: 13px;
+      white-space: nowrap;
+    }
     /* いま注いでいる回 */
     .timer-steps li.current {
       margin: 0 -8px;
@@ -788,8 +794,34 @@
     </div>
   </section>
 
-  <!-- ③ 注ぐ回数を選ぶ -->
+  <!-- ③ レシピ方式（自由／4:6メソッド） -->
   <section class="card">
+    <h2>レシピ方式</h2>
+    <div class="choices two" id="methodButtons">
+      <button type="button" data-method="free" class="selected">自由</button>
+      <button type="button" data-method="46">4:6メソッド</button>
+    </div>
+    <!-- 「4:6メソッド」のときだけ表示 -->
+    <div id="method46Box" hidden>
+      <p class="sub-label">前半（お湯の40%・2投）の味</p>
+      <div class="choices three" id="balanceButtons">
+        <button type="button" data-balance="sweet">甘め</button>
+        <button type="button" data-balance="standard" class="selected">標準</button>
+        <button type="button" data-balance="bright">明るめ</button>
+      </div>
+      <p class="note">甘め＝1投目を少なく、明るめ＝1投目を多く、標準＝均等に注ぎます。</p>
+      <p class="sub-label">後半（お湯の60%）の回数</p>
+      <div class="choices three" id="latterButtons">
+        <button type="button" data-latter="1">1回</button>
+        <button type="button" data-latter="2">2回</button>
+        <button type="button" data-latter="3" class="selected">3回</button>
+      </div>
+      <p class="note">回数が多いほど濃く、少ないほど軽くなります。</p>
+    </div>
+  </section>
+
+  <!-- ④ 注ぐ回数を選ぶ（自由のときだけ） -->
+  <section class="card" id="poursCard">
     <h2>注ぐ回数（蒸らしのあと）</h2>
     <div class="choices three" id="pourButtons">
       <button type="button" data-pours="2">2回</button>
@@ -798,7 +830,7 @@
     </div>
   </section>
 
-  <!-- ④ 注ぐ量の目安（計算結果） -->
+  <!-- ⑤ 注ぐ量の目安（計算結果） -->
   <section class="card">
     <h2>注ぐ量の目安（スケールの数字）</h2>
     <p class="note" id="message">豆の量かお湯の量を入力してください。</p>
@@ -1091,6 +1123,9 @@
   let lastInput = "beans"; // 最後に入力したのは「豆」か「お湯」か
   let bloomManual = null;  // 手入力した蒸らし量（null のときは自動＝豆×2）
   let pourManual = [];     // 各回の手入力量（null の回は自動）。最後の1投は含めない
+  let method = "free";     // レシピ方式："free"（自由）/ "46"（4:6メソッド）
+  let balance = "standard";// 4:6 前半の味："sweet"（甘め）/ "standard"（標準）/ "bright"（明るめ）
+  let latterPours = 3;     // 4:6 後半の回数（1〜3）
   let brewStyle = "hot";   // "hot"（ホット）/ "ice"（アイス）
   let icePercent = 40;     // アイスのときの氷の割合（お湯＋氷の合計に対して、%）
 
@@ -1137,6 +1172,23 @@
     showSteps();
   }
 
+  // ===== 4:6メソッドの設定（数字を変えると計算が変わる） =====
+  const FOUR_SIX = {
+    firstHalf: 0.4,   // 前半に使うお湯の割合（40%）。残り60%が後半
+    // 前半のうち1投目に使う割合（2投目は残り）。例：お湯300gなら前半120g → 甘め 50/70、標準 60/60、明るめ 70/50
+    balance: {
+      sweet:    { name: "甘め",   first: 5 / 12 },
+      standard: { name: "標準",   first: 1 / 2 },
+      bright:   { name: "明るめ", first: 7 / 12 }
+    },
+    interval: 45      // タイマーの目安：1投ごとの間隔（秒）
+  };
+
+  // 一覧の行の数（自由＝蒸らし＋注ぐ回数、4:6＝前半2投＋後半の回数）
+  function stepCount() {
+    return method === "46" ? 2 + latterPours : pours + 1;
+  }
+
   // 合計の量（ホット＝お湯、アイス＝お湯＋氷）を、注ぐお湯と氷に分ける
   function splitWater(total) {
     if (brewStyle !== "ice") return { water: total, ice: 0 };
@@ -1150,6 +1202,15 @@
     const total = parseFloat(waterInput.value);
     if (!(beans > 0) || !(total > 0)) return null;
     const { water, ice } = splitWater(total);
+
+    // 4:6メソッド：前半40%を2投（配分は味で変える）、後半60%を均等に分ける
+    if (method === "46") {
+      const firstHalf = water * FOUR_SIX.firstHalf;
+      const first = firstHalf * FOUR_SIX.balance[balance].first;
+      const latter = new Array(latterPours).fill((water - firstHalf) / latterPours);
+      // 1投目を「蒸らし」の位置に入れる（2投目以降が amounts）
+      return { water, ice, total, bloom: first, amounts: [firstHalf - first, ...latter] };
+    }
 
     // 蒸らし：手入力があればそれ、なければ豆の2倍
     const bloom = bloomManual !== null ? bloomManual : beans * 2;
@@ -1183,8 +1244,8 @@
   function buildRows() {
     stepsList.innerHTML = "";
     rows = [];
-    const names = ["蒸らし"];
-    for (let i = 1; i <= pours; i++) names.push(i + "投目");
+    const names = [];
+    for (let i = 0; i < stepCount(); i++) names.push(stepName(i, method === "46"));
 
     names.forEach((name, index) => {
       const li = document.createElement("li");
@@ -1195,8 +1256,8 @@
       const input = li.querySelector("input");
       const isLast = index === names.length - 1;
 
-      if (isLast) {
-        // 最後の1投は自動計算なので入力できないようにする
+      if (isLast || method === "46") {
+        // 最後の1投（4:6メソッドは全部）は自動計算なので入力できないようにする
         input.readOnly = true;
         input.tabIndex = -1;
       } else {
@@ -1237,14 +1298,14 @@
     hint.hidden = false;
 
     const amounts = [plan.bloom, ...plan.amounts]; // 蒸らし＋各回
-    const manualFlags = [bloomManual !== null, ...pourManual.map(v => v !== null), false];
+    const manualFlags = method === "46" ? [] : [bloomManual !== null, ...pourManual.map(v => v !== null), false];
     let total = 0;
 
     amounts.forEach((amount, i) => {
       const row = rows[i];
       total += amount;
       if (row.input !== editing) row.input.value = format(amount);
-      row.input.classList.toggle("manual", manualFlags[i]);
+      row.input.classList.toggle("manual", !!manualFlags[i]);
       row.total.textContent = format(total) + " g";
       row.li.classList.remove("over");
     });
@@ -1273,6 +1334,31 @@
     $("iceSplit").hidden = !ice;
     $("ratioTitle").textContent = ice ? "比率（豆 : お湯＋氷）" : "比率（豆 : お湯）";
     $("waterLabel").textContent = ice ? "合計の量（お湯＋氷）" : "お湯の量";
+  }
+
+  // レシピ方式を切り替える（行の作り直しは呼んだ側で行う）
+  function applyMethod(value) {
+    method = value === "46" ? "46" : "free";
+    const is46 = method === "46";
+    selectButton($("methodButtons"), $("methodButtons").querySelector('[data-method="' + method + '"]'));
+    $("method46Box").hidden = !is46;
+    $("poursCard").hidden = is46;          // 4:6は「後半の回数」で決めるので、注ぐ回数の欄は隠す
+    $("resetButton").hidden = is46;        // 4:6は手入力しないので、リセットも不要
+    $("hint").textContent = is46
+      ? "4:6メソッドでは、各回の量は自動で決まります（方式を「自由」にすると書き換えできます）。"
+      : "各回の量は書き換えできます（空にすると自動に戻ります）。最後の1投は自動で計算します。";
+  }
+
+  // 4:6メソッドの前半の味（甘め／標準／明るめ）
+  function applyBalance(value) {
+    balance = FOUR_SIX.balance[value] ? value : "standard";
+    selectButton($("balanceButtons"), $("balanceButtons").querySelector('[data-balance="' + balance + '"]'));
+  }
+
+  // 4:6メソッドの後半の回数（1〜3）
+  function applyLatter(count) {
+    latterPours = [1, 2, 3].includes(count) ? count : 3;
+    selectButton($("latterButtons"), $("latterButtons").querySelector('[data-latter="' + latterPours + '"]'));
   }
 
   // 氷の割合を切り替える（30〜50%）
@@ -1319,7 +1405,10 @@
       bloom: bloomManual,
       pours: pours,
       style: brewStyle,
-      icePercent: icePercent
+      icePercent: icePercent,
+      method: method,
+      balance: balance,
+      latterPours: latterPours
     };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -1343,6 +1432,9 @@
     if (typeof data.bloom === "number" && data.bloom >= 0) bloomManual = data.bloom;
     applyStyle(data.style);
     applyIcePercent(data.icePercent);
+    applyMethod(data.method);
+    applyBalance(data.balance);
+    applyLatter(data.latterPours);
     if ([2, 3, 4].includes(data.pours)) {
       const group = document.getElementById("pourButtons");
       selectButton(group, group.querySelector('[data-pours="' + data.pours + '"]'));
@@ -1357,6 +1449,35 @@
     const button = e.target.closest("button");
     if (!button) return;
     applyStyle(button.dataset.style);
+    showSteps();
+    save();
+  });
+
+  // レシピ方式（自由／4:6）を押したとき
+  document.getElementById("methodButtons").addEventListener("click", e => {
+    const button = e.target.closest("button");
+    if (!button) return;
+    applyMethod(button.dataset.method);
+    buildRows();
+    showSteps();
+    save();
+  });
+
+  // 4:6の前半の味を押したとき
+  document.getElementById("balanceButtons").addEventListener("click", e => {
+    const button = e.target.closest("button");
+    if (!button) return;
+    applyBalance(button.dataset.balance);
+    showSteps();
+    save();
+  });
+
+  // 4:6の後半の回数を押したとき（行の数が変わる）
+  document.getElementById("latterButtons").addEventListener("click", e => {
+    const button = e.target.closest("button");
+    if (!button) return;
+    applyLatter(Number(button.dataset.latter));
+    buildRows();
     showSteps();
     save();
   });
@@ -1518,7 +1639,9 @@
   }
 
   // 何回目かを名前にする（0 → "蒸らし"、1 → "1投目"…）
-  function stepName(i) {
+  // 4:6メソッド（is46 が true）は、1投目が蒸らしを兼ねるので 0 → "1投目"、1 → "2投目"…
+  function stepName(i, is46) {
+    if (is46) return (i + 1) + "投目";
     return i === 0 ? "蒸らし" : i + "投目";
   }
 
@@ -1564,12 +1687,28 @@
   //   water：注ぐお湯の量、ice：氷の量（ホットは0）、icePercent：氷の割合（ホットは0）
   function normalizeRecipe(r) {
     const ice = r.style === "ice";
+    // 4:6の pours は「2投目＋後半（1〜3回）」なので 2〜4個
+    const fourSix = r.method === "46" && r.pours.length >= 2 && r.pours.length <= 4;
     return {
       ...r,
       style: ice ? "ice" : "hot",
       icePercent: ice && [30, 35, 40, 45, 50].includes(r.icePercent) ? r.icePercent : (ice ? 40 : 0),
-      ice: ice && typeof r.ice === "number" && r.ice >= 0 ? r.ice : 0
+      ice: ice && typeof r.ice === "number" && r.ice >= 0 ? r.ice : 0,
+      // レシピ方式（ない古い記録は「自由」）。4:6のときだけ前半の味と後半の回数を持つ
+      method: fourSix ? "46" : "free",
+      balance: fourSix && FOUR_SIX.balance[r.balance] ? r.balance : (fourSix ? "standard" : ""),
+      latterPours: fourSix ? r.pours.length - 1 : 0
     };
+  }
+
+  function is46(recipe) {
+    return recipe.method === "46";
+  }
+
+  // レシピ方式の説明（"4:6メソッド（前半：甘め・後半：3回）" / "自由"）
+  function methodText(recipe) {
+    if (!is46(recipe)) return "自由";
+    return "4:6メソッド（前半：" + FOUR_SIX.balance[recipe.balance].name + "・後半：" + recipe.latterPours + "回）";
   }
 
   // 計算機の値を表示する（pourTimes があれば各投の時間も並べる）
@@ -1583,11 +1722,14 @@
     } else {
       addInfo(dl, "湯量", format(recipe.water) + " ml");
     }
-    addInfo(dl, "注ぐ回数", recipe.pours.length + "回（蒸らしのあと）");
+    addInfo(dl, "方式", methodText(recipe));
+    addInfo(dl, "注ぐ回数", is46(recipe)
+      ? (recipe.pours.length + 1) + "回（前半2回＋後半" + recipe.latterPours + "回）"
+      : recipe.pours.length + "回（蒸らしのあと）");
     // 例："1投目  100 g ― 0:45"（スケールの累計と、注ぎ始めた時間）
     const lines = recipe.totals.map((total, i) => {
       const time = pourTimes && pourTimes[i] !== null ? " ― " + secToText(pourTimes[i]) : "";
-      return stepName(i) + "  " + format(total) + " g" + time;
+      return stepName(i, is46(recipe)) + "  " + format(total) + " g" + time;
     });
     addInfo(dl, "注ぎ方", lines.join("\n"));
   }
@@ -1932,6 +2074,9 @@
       style: brewStyle,                               // "hot" / "ice"
       icePercent: brewStyle === "ice" ? icePercent : 0,
       ice: plan.ice,                                  // 氷の量（ホットは0）
+      method: method,                                 // "free"（自由）/ "46"（4:6メソッド）
+      balance: method === "46" ? balance : "",        // 4:6 前半の味
+      latterPours: method === "46" ? latterPours : 0, // 4:6 後半の回数
       ratio: ratio,
       bloom: round(plan.bloom),
       pours: plan.amounts.map(round),                 // 各回に注ぐ量
@@ -2040,7 +2185,7 @@
       input.inputMode = "numeric";
       input.placeholder = "0:00";
       input.value = record.pourTimes[i] !== null ? secToText(record.pourTimes[i]) : "";
-      li.append(el("span", "name", stepName(i)), el("span", "", format(total) + " g"), input);
+      li.append(el("span", "name", stepName(i, is46(record.recipe))), el("span", "", format(total) + " g"), input);
       timesList.appendChild(li);
       return input;
     });
@@ -2225,6 +2370,7 @@
       const main = el("div", "bean",
         "豆" + format(r.recipe.beans) + "g・" + liquidText(r.recipe) + "・1:" + format(r.recipe.ratio));
       main.prepend(el("span", "tag style-tag" + (isIce(r.recipe) ? " ice" : ""), styleName(r.recipe.style)));
+      if (is46(r.recipe)) main.prepend(el("span", "tag style-tag", "4:6")); // 4:6メソッドの印
 
       const parts = [];
       if (r.timeSec !== null) parts.push("抽出 " + secToText(r.timeSec));
@@ -2310,16 +2456,25 @@
       applyRatioChoice("custom");
     }
 
-    // 注ぐ回数
+    // レシピ方式
+    applyMethod(r.method);
+    if (is46(r)) {
+      // 4:6メソッド：前半の味と後半の回数を入れれば、各回の量は自動で決まる
+      applyBalance(r.balance);
+      applyLatter(r.latterPours);
+      buildRows();
+    }
+
+    // 注ぐ回数（自由のとき）
     const count = r.pours.length;
-    if ([2, 3, 4].includes(count)) {
+    if (!is46(r) && [2, 3, 4].includes(count)) {
       const group = $("pourButtons");
       selectButton(group, group.querySelector('[data-pours="' + count + '"]'));
       setPours(count);
       // 各回の量（最後の1投は自動計算なので入れない）
       pourManual = r.pours.slice(0, -1);
     }
-    bloomManual = r.bloom;
+    if (!is46(r)) bloomManual = r.bloom;
 
     // 豆とお湯の量
     beansInput.value = format(r.beans);
@@ -2514,7 +2669,10 @@
         title: "注ぐ回数を減らす・ゆっくり注ぐ",
         min: 2,
         known: "注ぐ回数 {before}回 → {after}回（蒸らしのあと。1回ずつゆっくり注ぐ）",
-        atLimit: "注ぐ回数はすでに{before}回なので、回数はそのままで1回ずつゆっくり注いでください。"
+        atLimit: "注ぐ回数はすでに{before}回なので、回数はそのままで1回ずつゆっくり注いでください。",
+        // 4:6メソッドの記録のとき（4:6では後半の回数が多いほど濃く・重くなる）
+        known46: "4:6メソッドでは後半の回数を増やすと重くなります：後半 {before}回 → {after}回（1回ずつゆっくり注ぐ）",
+        atLimit46: "後半はすでに{before}回なので、回数はそのままで1回ずつゆっくり注いでください。"
       },
       bloomLonger: {
         title: "蒸らしを長くする",
@@ -2629,6 +2787,18 @@
         const after = key === "timeLonger" ? record.timeSec + o.step : Math.max(o.min, record.timeSec - o.step);
         result.disabled = after === record.timeSec;
         result.detail = fillText(result.disabled ? o.atLimit : o.known, { before: secToText(record.timeSec), after: secToText(after) });
+      }
+
+    } else if (key === "poursFewer" && is46(record.recipe)) {
+      // 4:6メソッド：後半の回数を1回増やす（最大3回）。各回の量は計算機が決め直す
+      const before = record.recipe.latterPours;
+      if (before >= 3) {
+        result.detail = fillText(o.atLimit46, { before: before });
+      } else {
+        const r = record.recipe;
+        const each = round1((r.water - r.water * FOUR_SIX.firstHalf) / (before + 1));
+        result.recipe = { ...r, latterPours: before + 1, pours: [r.pours[0], ...new Array(before + 1).fill(each)] };
+        result.detail = fillText(o.known46, { before: before, after: before + 1 });
       }
 
     } else if (key === "poursFewer") {
@@ -3040,12 +3210,26 @@
     $("clock").textContent = secToText(sec);
   }
 
+  // 4:6メソッドの、i 投目の目安の時刻（秒）：0:00, 0:45, 1:30…
+  function targetSec(i) {
+    return i * FOUR_SIX.interval;
+  }
+
+  // 目安との差を "+5秒" / "−3秒" / "±0秒" の形にする
+  function diffText(sec) {
+    if (sec > 0) return "+" + sec + "秒";
+    if (sec < 0) return "−" + (-sec) + "秒";
+    return "±0秒";
+  }
+
   // タイマー画面をまるごと描き直す（ボタンを押したときに呼ぶ）
   function renderTimer() {
     const recipe = timer.recipe;
     const times = timerPourTimes();
     const nextIndex = times.length;                      // 次に注ぐ回
     const hasNext = nextIndex < recipe.totals.length;    // まだ注ぐ回が残っているか
+    const fourSix = is46(recipe);                        // 4:6メソッドなら目安の時刻を出す
+    const name = i => stepName(i, fourSix);
 
     $("timerRecipe").textContent =
       styleName(recipe.style) + "・豆" + format(recipe.beans) + "g・" + liquidText(recipe) + "・1:" + format(recipe.ratio);
@@ -3056,16 +3240,15 @@
     list.innerHTML = "";
     recipe.totals.forEach((total, i) => {
       const li = document.createElement("li");
-      const name = document.createElement("span");
-      name.className = "name";
-      name.textContent = stepName(i);
-      const grams = document.createElement("span");
-      grams.className = "grams";
-      grams.textContent = format(total) + " g";
-      const time = document.createElement("span");
-      time.className = "time";
-      time.textContent = times[i] !== undefined ? secToText(times[i]) : "―";
-      li.append(name, grams, time);
+      const label = el("span", "name", name(i));
+      const grams = el("span", "grams", format(total) + " g");
+      const time = el("span", "time", times[i] !== undefined ? secToText(times[i]) : "―");
+      // 4:6メソッド：目安の時刻と、実際に押した時刻との差
+      if (fourSix) {
+        const diff = times[i] !== undefined && i > 0 ? "（" + diffText(times[i] - targetSec(i)) + "）" : "";
+        time.appendChild(el("span", "target", "目安 " + secToText(targetSec(i)) + diff));
+      }
+      li.append(label, grams, time);
       // いま注いでいる回に色をつける
       if (timer.state === "running" && i === times.length - 1) li.classList.add("current");
       list.appendChild(li);
@@ -3078,15 +3261,19 @@
     $("timerUndo").disabled = timer.state === "idle";
 
     if (timer.state === "idle") {
-      status.textContent = "スタートを押したら、蒸らしのお湯を注ぎ始めます。";
+      status.textContent = fourSix
+        ? "スタートを押したら、1投目のお湯を注ぎ始めます（目安：" + FOUR_SIX.interval + "秒ごとに次の注ぎ）。"
+        : "スタートを押したら、蒸らしのお湯を注ぎ始めます。";
       main.innerHTML = "▶ スタート";
       sub.hidden = true;
     } else if (timer.state === "running") {
       const now = times.length - 1;
-      status.textContent = stepName(now) + "：スケール " + format(recipe.totals[now]) + " g まで" +
+      status.textContent = name(now) + "：スケール " + format(recipe.totals[now]) + " g まで" +
+        (fourSix && now > 0 ? "（目安との差 " + diffText(times[now] - targetSec(now)) + "）" : "") +
         (hasNext ? "" : "。落ち切ったら終了");
       if (hasNext) {
-        main.innerHTML = "次の注ぎ<small>" + stepName(nextIndex) + "（" + format(recipe.totals[nextIndex]) + " g まで）</small>";
+        main.innerHTML = "次の注ぎ<small>" + name(nextIndex) + "（" + format(recipe.totals[nextIndex]) + " g まで" +
+          (fourSix ? "・目安 " + secToText(targetSec(nextIndex)) : "") + "）</small>";
         sub.textContent = "■ 終了";
         sub.hidden = false;
       } else {
